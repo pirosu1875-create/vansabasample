@@ -330,7 +330,8 @@
             midBossSpawned: false,
             finalBossSpawned: false,
             nextMidBossKill: 30,
-            finalBossKills: 0
+            finalBossKills: 0,
+            nextFinalBossKill: 100
         };
 
         let player = {
@@ -355,6 +356,7 @@
             projectileRange: 300,
             projectileCooldown: 60,
             projectileTimer: 0,
+            projectileDamageMult: 0.8,
             
             hasShield: false,
             shieldAngle: 0,
@@ -516,18 +518,16 @@
             let normalHp = 1 * hpMultiplier;
             let midBossHp = normalHp * 3;
             let finalBossHp = (midBossHp * 5) * 20;
-            for(let i=0; i<2; i++) {
-                enemies.push({
-                    x: width / 2 + (i === 0 ? -100 : 100), 
-                    y: -100, 
-                    size: 120, 
-                    speed: 0.8,
-                    hp: finalBossHp,
-                    damage: 40,
-                    isFinalBoss: true
-                });
-            }
-            showAlert('DANGER: FINAL BOSSES APPROACHING!');
+            enemies.push({
+                x: width / 2, 
+                y: -100, 
+                size: 120, 
+                speed: 0.8,
+                hp: finalBossHp,
+                damage: 40,
+                isFinalBoss: true
+            });
+            showAlert('DANGER: FINAL BOSS APPROACHING!');
         }
 
         function triggerGameClear() {
@@ -573,7 +573,8 @@
                     vx: Math.cos(angle) * player.projectileSpeed,
                     vy: Math.sin(angle) * player.projectileSpeed,
                     dist: 0,
-                    size: player.projectileSize
+                    size: player.projectileSize,
+                    damage: player.damage * player.projectileDamageMult
                 });
             }
         }
@@ -621,7 +622,10 @@
                                     game.finalBossKills++;
                                     if(game.finalBossKills >= 2) triggerGameClear();
                                 }
-                                expOrbs.push({ x: e.x, y: e.y, radius: 4, value: 1 });
+                                let xp = 1; let r = 4;
+                                if(e.isMidBoss){ xp = 3; r = 6; }
+                                else if(e.isFinalBoss){ xp = 8; r = 8; }
+                                expOrbs.push({ x: e.x, y: e.y, radius: r, value: xp });
                                 if (Math.random() < 0.10) {
                                     healthPotions.push({ x: e.x, y: e.y, radius: 10 });
                                 }
@@ -675,21 +679,24 @@
                 }
             }
 
-            if (game.kills >= game.nextMidBossKill && !game.finalBossSpawned) {
-                spawnMidBoss();
-                game.nextMidBossKill += 30;
-            }
-            if (game.kills >= 100 && !game.finalBossSpawned) {
-                game.finalBossSpawned = true;
-                spawnFinalBoss();
-            }
+            let hasFinalBoss = enemies.some(e => e.isFinalBoss);
 
-            if (!game.finalBossSpawned) {
+            if (!hasFinalBoss) {
+                if (game.kills >= game.nextMidBossKill) {
+                    spawnMidBoss();
+                    game.nextMidBossKill += 30;
+                }
+
                 let currentSpawnRate = Math.max(10, game.baseSpawnRate - game.level * 3);
                 if (game.frameCount % currentSpawnRate === 0) {
                     spawnEnemy();
                     if (game.level >= 5) spawnEnemy();
                 }
+            }
+
+            if (game.kills >= game.nextFinalBossKill && !hasFinalBoss) {
+                spawnFinalBoss();
+                game.nextFinalBossKill += 100;
             }
 
             if (player.hasProjectile) {
@@ -710,7 +717,7 @@
                 for (let j = enemies.length - 1; j >= 0; j--) {
                     let e = enemies[j];
                     if (getDistance(p.x, p.y, e.x, e.y) < p.size + e.size / 2) {
-                        e.hp -= player.damage * 0.8;
+                        e.hp -= p.damage;
                         hit = true;
                         
                         if (e.hp <= 0) {
@@ -718,7 +725,10 @@
                                 game.finalBossKills++;
                                 if(game.finalBossKills >= 2) triggerGameClear();
                             }
-                            expOrbs.push({ x: e.x, y: e.y, radius: 4, value: 1 });
+                            let xp = 1; let r = 4;
+                            if(e.isMidBoss){ xp = 3; r = 6; }
+                            else if(e.isFinalBoss){ xp = 8; r = 8; }
+                            expOrbs.push({ x: e.x, y: e.y, radius: r, value: xp });
                             if (Math.random() < 0.10) healthPotions.push({ x: e.x, y: e.y, radius: 10 });
                             enemies.splice(j, 1);
                             game.kills++;
@@ -748,7 +758,10 @@
                                     game.finalBossKills++;
                                     if(game.finalBossKills >= 2) triggerGameClear();
                                 }
-                                expOrbs.push({ x: e.x, y: e.y, radius: 4, value: 1 });
+                                let xp = 1; let r = 4;
+                                if(e.isMidBoss){ xp = 3; r = 6; }
+                                else if(e.isFinalBoss){ xp = 8; r = 8; }
+                                expOrbs.push({ x: e.x, y: e.y, radius: r, value: xp });
                                 if (Math.random() < 0.10) healthPotions.push({ x: e.x, y: e.y, radius: 10 });
                                 enemies.splice(j, 1);
                                 game.kills++;
@@ -838,6 +851,7 @@
                 options.push({ name: "弾の飛距離UP", desc: "遠距離攻撃が遠くまで届きます", apply: () => player.projectileRange += 100 });
                 options.push({ name: "弾のサイズUP", desc: "遠距離攻撃の弾が大きくなります", apply: () => player.projectileSize += 3 });
                 options.push({ name: "弾速UP", desc: "遠距離攻撃の弾スピードが上がります", apply: () => player.projectileSpeed += 2 });
+                options.push({ name: "弾の威力UP", desc: "遠距離攻撃の与えるダメージが増加します", apply: () => player.projectileDamageMult += 0.5 });
             }
 
             if (!player.hasShield) {
