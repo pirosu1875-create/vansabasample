@@ -327,7 +327,10 @@
             state: 'LOADING',
             frameCount: 0,
             baseSpawnRate: 70,
-            bossSpawned: false
+            midBossSpawned: false,
+            finalBossSpawned: false,
+            nextMidBossKill: 30,
+            finalBossKills: 0
         };
 
         let player = {
@@ -344,13 +347,29 @@
             attackRange: 80, 
             attackAngle: Math.PI * 0.5, 
             invincibleTimer: 0,
-            imageLoaded: false
+            imageLoaded: false,
+            
+            hasProjectile: false,
+            projectileSpeed: 5,
+            projectileSize: 8,
+            projectileRange: 300,
+            projectileCooldown: 60,
+            projectileTimer: 0,
+            
+            hasShield: false,
+            shieldAngle: 0,
+            shieldSpeed: 0.05,
+            shieldRadius: 60,
+            shieldSize: 15,
+            shieldDamage: 1,
+            shieldCount: 0
         };
 
         let enemies = [];
         let slashes = []; 
         let expOrbs = [];
         let healthPotions = [];
+        let projectiles = [];
 
         const hpBar = document.getElementById('hp-bar');
         const expBar = document.getElementById('exp-bar');
@@ -364,7 +383,7 @@
         // =========================
         // 画像のプリロード
         // =========================
-        let totalImagesToLoad = 2;
+        let totalImagesToLoad = 3;
         let imagesLoaded = 0;
 
         function checkGameReady() {
@@ -412,6 +431,19 @@
             checkGameReady();
         };
 
+        const rabitoImage = new Image();
+        rabitoImage.src = 'rabito.png';
+        let rabitoImageLoaded = false;
+        rabitoImage.onload = () => {
+            rabitoImageLoaded = true;
+            checkGameReady();
+        };
+        rabitoImage.onerror = () => {
+            console.error("rabito.pngが見つかりません。デフォルトの紫四角で代用します。");
+            rabitoImageLoaded = false;
+            checkGameReady();
+        };
+
         // ユーティリティ計算
         function getDistance(x1, y1, x2, y2) {
             return Math.hypot(x2 - x1, y2 - y1);
@@ -444,34 +476,58 @@
             });
         }
 
-        function spawnBoss() {
+        function showAlert(text) {
+            const alertDiv = document.createElement('div');
+            alertDiv.innerText = text;
+            alertDiv.style.position = 'absolute';
+            alertDiv.style.top = '100px';
+            alertDiv.style.left = '50%';
+            alertDiv.style.transform = 'translate(-50%, -50%)';
+            alertDiv.style.color = '#e74c3c';
+            alertDiv.style.fontSize = '48px';
+            alertDiv.style.fontWeight = 'bold';
+            alertDiv.style.textShadow = '2px 2px 4px #000';
+            alertDiv.style.zIndex = '30';
+            document.body.appendChild(alertDiv);
+            setTimeout(() => {
+                if(document.body.contains(alertDiv)) {
+                    document.body.removeChild(alertDiv);
+                }
+            }, 3000);
+        }
+
+        function spawnMidBoss() {
             let hpMultiplier = 1 + Math.floor(game.level / 3);
+            let normalHp = 1 * hpMultiplier;
             enemies.push({
                 x: width / 2, 
                 y: -100, 
-                size: 100, 
+                size: 80, 
                 speed: 1.0,
-                hp: 150 * hpMultiplier,
-                damage: 30,
-                isBoss: true
+                hp: normalHp * 9,
+                damage: 20,
+                isMidBoss: true
             });
-            const bossAlert = document.createElement('div');
-            bossAlert.innerText = 'WARNING: BOSS APPROACHING!';
-            bossAlert.style.position = 'absolute';
-            bossAlert.style.top = '100px';
-            bossAlert.style.left = '50%';
-            bossAlert.style.transform = 'translate(-50%, -50%)';
-            bossAlert.style.color = '#e74c3c';
-            bossAlert.style.fontSize = '48px';
-            bossAlert.style.fontWeight = 'bold';
-            bossAlert.style.textShadow = '2px 2px 4px #000';
-            bossAlert.style.zIndex = '30';
-            document.body.appendChild(bossAlert);
-            setTimeout(() => {
-                if(document.body.contains(bossAlert)) {
-                    document.body.removeChild(bossAlert);
-                }
-            }, 3000);
+            showAlert('WARNING: MID-BOSS APPROACHING!');
+        }
+
+        function spawnFinalBoss() {
+            let hpMultiplier = 1 + Math.floor(game.level / 3);
+            let normalHp = 1 * hpMultiplier;
+            let midBossHp = normalHp * 3;
+            let finalBossHp = (midBossHp * 5) * 20;
+            for(let i=0; i<2; i++) {
+                enemies.push({
+                    x: width / 2 + (i === 0 ? -100 : 100), 
+                    y: -100, 
+                    size: 120, 
+                    speed: 0.8,
+                    hp: finalBossHp,
+                    damage: 40,
+                    isFinalBoss: true
+                });
+            }
+            showAlert('DANGER: FINAL BOSSES APPROACHING!');
         }
 
         function triggerGameClear() {
@@ -499,6 +555,27 @@
                 <button onclick="location.reload()" style="padding: 15px 40px; font-size: 24px; cursor: pointer; border: none; border-radius: 10px; background: #3498db; color: white; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.5);">もう一度プレイ</button>
             `;
             document.body.appendChild(gameClearModal);
+        }
+
+        function fireProjectile() {
+            if (enemies.length === 0) return;
+            let closest = null;
+            let md = Infinity;
+            for (let e of enemies) {
+                let d = getDistance(player.x, player.y, e.x, e.y);
+                if (d < md) { md = d; closest = e; }
+            }
+            if (closest) {
+                let angle = Math.atan2(closest.y - player.y, closest.x - player.x);
+                projectiles.push({
+                    x: player.x,
+                    y: player.y,
+                    vx: Math.cos(angle) * player.projectileSpeed,
+                    vy: Math.sin(angle) * player.projectileSpeed,
+                    dist: 0,
+                    size: player.projectileSize
+                });
+            }
         }
 
         function fireSlash() {
@@ -540,8 +617,9 @@
                             e.hp -= player.damage;
                             
                             if (e.hp <= 0) {
-                                if (e.isBoss) {
-                                    triggerGameClear();
+                                if (e.isFinalBoss) {
+                                    game.finalBossKills++;
+                                    if(game.finalBossKills >= 2) triggerGameClear();
                                 }
                                 expOrbs.push({ x: e.x, y: e.y, radius: 4, value: 1 });
                                 if (Math.random() < 0.10) {
@@ -597,15 +675,87 @@
                 }
             }
 
-            if (game.kills >= 30 && !game.bossSpawned) {
-                game.bossSpawned = true;
-                spawnBoss();
+            if (game.kills >= game.nextMidBossKill && !game.finalBossSpawned) {
+                spawnMidBoss();
+                game.nextMidBossKill += 30;
+            }
+            if (game.kills >= 100 && !game.finalBossSpawned) {
+                game.finalBossSpawned = true;
+                spawnFinalBoss();
             }
 
-            let currentSpawnRate = Math.max(10, game.baseSpawnRate - game.level * 3);
-            if (game.frameCount % currentSpawnRate === 0) {
-                spawnEnemy();
-                if (game.level >= 5) spawnEnemy();
+            if (!game.finalBossSpawned) {
+                let currentSpawnRate = Math.max(10, game.baseSpawnRate - game.level * 3);
+                if (game.frameCount % currentSpawnRate === 0) {
+                    spawnEnemy();
+                    if (game.level >= 5) spawnEnemy();
+                }
+            }
+
+            if (player.hasProjectile) {
+                player.projectileTimer++;
+                if (player.projectileTimer >= player.projectileCooldown) {
+                    player.projectileTimer = 0;
+                    fireProjectile();
+                }
+            }
+            
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                let p = projectiles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.dist += Math.hypot(p.vx, p.vy);
+
+                let hit = false;
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    let e = enemies[j];
+                    if (getDistance(p.x, p.y, e.x, e.y) < p.size + e.size / 2) {
+                        e.hp -= player.damage * 0.8;
+                        hit = true;
+                        
+                        if (e.hp <= 0) {
+                            if (e.isFinalBoss) {
+                                game.finalBossKills++;
+                                if(game.finalBossKills >= 2) triggerGameClear();
+                            }
+                            expOrbs.push({ x: e.x, y: e.y, radius: 4, value: 1 });
+                            if (Math.random() < 0.10) healthPotions.push({ x: e.x, y: e.y, radius: 10 });
+                            enemies.splice(j, 1);
+                            game.kills++;
+                        }
+                        break;
+                    }
+                }
+                if (hit || p.dist > player.projectileRange) {
+                    projectiles.splice(i, 1);
+                }
+            }
+
+            if (player.hasShield) {
+                player.shieldAngle += player.shieldSpeed;
+                for (let i = 0; i < player.shieldCount; i++) {
+                    let angle = player.shieldAngle + (Math.PI * 2 / player.shieldCount) * i;
+                    let sx = player.x + Math.cos(angle) * player.shieldRadius;
+                    let sy = player.y + Math.sin(angle) * player.shieldRadius;
+
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        let e = enemies[j];
+                        if (getDistance(sx, sy, e.x, e.y) < player.shieldSize + e.size / 2) {
+                            e.hp -= player.shieldDamage;
+                            
+                            if (e.hp <= 0) {
+                                if (e.isFinalBoss) {
+                                    game.finalBossKills++;
+                                    if(game.finalBossKills >= 2) triggerGameClear();
+                                }
+                                expOrbs.push({ x: e.x, y: e.y, radius: 4, value: 1 });
+                                if (Math.random() < 0.10) healthPotions.push({ x: e.x, y: e.y, radius: 10 });
+                                enemies.splice(j, 1);
+                                game.kills++;
+                            }
+                        }
+                    }
+                }
             }
 
             for (let i = enemies.length - 1; i >= 0; i--) {
@@ -672,20 +822,41 @@
             }
         }
 
-        const upgradeOptions = [
-            { name: "攻撃速度アップ", desc: "斬撃の間隔が短縮されます", apply: () => player.attackCooldown = Math.max(10, player.attackCooldown * 0.85) },
-            { name: "斬撃距離アップ", desc: "攻撃の届く範囲（半径）が長くなります", apply: () => player.attackRange += 20 },
-            { name: "斬撃範囲拡大", desc: "斬撃の角度が広がり、最終的に周囲全方位化します", apply: () => player.attackAngle = Math.min(Math.PI * 2, player.attackAngle + Math.PI / 4) },
-            { name: "威カアップ", desc: "斬撃で敵に与えるダメージが倍増します", apply: () => player.damage += 1 },
-            { name: "移動速度アップ", desc: "プレイヤーの移動速度が上昇します", apply: () => player.speed += 0.5 },
-            { name: "最大HPアップ", desc: "最大HP+20、同時に少し回復します", apply: () => { player.maxHp += 20; player.hp = Math.min(player.maxHp, player.hp + 20); } }
-        ];
+        function getUpgradeOptions() {
+            let options = [
+                { name: "近接攻撃速度UP", desc: "斬撃の間隔が短縮されます", apply: () => player.attackCooldown = Math.max(10, player.attackCooldown * 0.85) },
+                { name: "近接斬撃距離UP", desc: "攻撃の届く範囲が長くなります", apply: () => player.attackRange += 20 },
+                { name: "近接斬撃範囲拡大", desc: "斬撃の角度が広がります", apply: () => player.attackAngle = Math.min(Math.PI * 2, player.attackAngle + Math.PI / 4) },
+                { name: "威力UP", desc: "斬撃で敵に与えるダメージが倍増します", apply: () => player.damage += 1 },
+                { name: "移動速度UP", desc: "プレイヤーの移動速度が上昇します", apply: () => player.speed += 0.5 },
+                { name: "最大HP増加", desc: "最大HP+20、同時に少し回復します", apply: () => { player.maxHp += 20; player.hp = Math.min(player.maxHp, player.hp + 20); } }
+            ];
+
+            if (!player.hasProjectile) {
+                options.push({ name: "遠距離攻撃（緑）取得", desc: "近くの敵に自動で弾を撃ちます", apply: () => player.hasProjectile = true });
+            } else {
+                options.push({ name: "弾の飛距離UP", desc: "遠距離攻撃が遠くまで届きます", apply: () => player.projectileRange += 100 });
+                options.push({ name: "弾のサイズUP", desc: "遠距離攻撃の弾が大きくなります", apply: () => player.projectileSize += 3 });
+                options.push({ name: "弾速UP", desc: "遠距離攻撃の弾スピードが上がります", apply: () => player.projectileSpeed += 2 });
+            }
+
+            if (!player.hasShield) {
+                options.push({ name: "回転シールド（盾）取得", desc: "自身の周りを回るシールドを展開します", apply: () => { player.hasShield = true; player.shieldCount = 2; } });
+            } else {
+                options.push({ name: "シールド回転速度UP", desc: "シールドの回るスピードが速くなります", apply: () => player.shieldSpeed += 0.02 });
+                options.push({ name: "シールド回転半径UP", desc: "シールドがより遠くを回るようになります", apply: () => player.shieldRadius += 20 });
+                options.push({ name: "シールド枚数+1", desc: "シールドの枚数が増加します", apply: () => player.shieldCount += 1 });
+            }
+
+            return options;
+        }
 
         function triggerLevelUp() {
             game.state = 'PAUSED';
             upgradeCards.innerHTML = '';
             
-            let shuffled = [...upgradeOptions].sort(() => 0.5 - Math.random());
+            let allOptions = getUpgradeOptions();
+            let shuffled = [...allOptions].sort(() => 0.5 - Math.random());
             let choices = shuffled.slice(0, 3);
             
             choices.forEach(upg => {
@@ -736,17 +907,72 @@
                 ctx.fillRect(p.x - 1, p.y - 4, 2, 8);
             }
 
+            for (let p of projectiles) {
+                ctx.strokeStyle = '#2ecc71';
+                ctx.lineWidth = p.size;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                let speedSq = p.vx*p.vx + p.vy*p.vy;
+                let length = p.size * 3;
+                let nx = 0, ny = 0;
+                if(speedSq > 0) {
+                    let spd = Math.sqrt(speedSq);
+                    nx = p.vx / spd;
+                    ny = p.vy / spd;
+                }
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p.x - nx * length, p.y - ny * length);
+                ctx.stroke();
+            }
+
             for (let e of enemies) {
-                if (enemyImageLoaded) {
-                    ctx.drawImage(enemyImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                if (e.isFinalBoss) {
+                    if (rabitoImageLoaded) {
+                        ctx.drawImage(rabitoImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                    } else {
+                        ctx.fillStyle = '#9b59b6';
+                        ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                    }
                 } else {
-                    ctx.fillStyle = '#e74c3c';
-                    ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                    if (enemyImageLoaded) {
+                        ctx.drawImage(enemyImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                    } else {
+                        ctx.fillStyle = '#e74c3c';
+                        ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                    }
                 }
             }
 
             ctx.save();
             ctx.translate(player.x, player.y);
+
+            if (player.hasShield) {
+                for (let i = 0; i < player.shieldCount; i++) {
+                    let angle = player.shieldAngle + (Math.PI * 2 / player.shieldCount) * i;
+                    let sx = Math.cos(angle) * player.shieldRadius;
+                    let sy = Math.sin(angle) * player.shieldRadius;
+                    
+                    ctx.save();
+                    ctx.translate(sx, sy);
+                    ctx.rotate(angle);
+                    
+                    ctx.fillStyle = '#a8e6cf';
+                    ctx.beginPath();
+                    let s = player.shieldSize;
+                    ctx.moveTo(0, s);
+                    ctx.lineTo(s * 0.8, s * 0.5);
+                    ctx.lineTo(s * 0.8, -s * 0.5);
+                    ctx.lineTo(-s * 0.8, -s * 0.5);
+                    ctx.lineTo(-s * 0.8, s * 0.5);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
 
             for (let s of slashes) {
                 let progress = s.duration / s.maxDuration; 
