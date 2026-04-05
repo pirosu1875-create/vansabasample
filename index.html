@@ -63,18 +63,18 @@
             margin-top: 10px;
         }
         
-        /* バーチャルジョイスティックUI */
+        /* フローティング（動的）バーチャルジョイスティックUI */
         #joystick-zone {
             position: absolute;
-            bottom: 40px;
-            left: 50%;
-            transform: translateX(-50%); /* 画面中央下部に配置 */
             width: 140px;
             height: 140px;
             border-radius: 50%;
             background: rgba(255, 255, 255, 0.15);
             border: 2px solid rgba(255, 255, 255, 0.3);
             z-index: 10;
+            display: none; /* デフォルトは非表示 */
+            pointer-events: none; /* タッチイベントはキャンバスで処理する */
+            transform: translate(-50%, -50%); /* 基準とするleft/topが円の中心になるように調整 */
             touch-action: none; 
         }
         #joystick-stick {
@@ -85,7 +85,7 @@
             height: 60px;
             border-radius: 50%;
             background: rgba(255, 255, 255, 0.6);
-            transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%); /* 中心に配置 */
             pointer-events: none; 
             box-shadow: 0 4px 8px rgba(0,0,0,0.5);
         }
@@ -182,7 +182,7 @@
         </div>
     </div>
     
-    <!-- 中央下部のバーチャルジョイスティック -->
+    <!-- タッチした位置に出現する動的ジョイスティック -->
     <div id="joystick-zone">
         <div id="joystick-stick"></div>
     </div>
@@ -220,66 +220,98 @@
         resize();
 
         // =========================
-        // 入力管理（キーボード＆ジョイスティック）
+        // 入力管理（キーボード）
         // =========================
         const keys = {};
         window.addEventListener('keydown', e => keys[e.code] = true);
         window.addEventListener('keyup', e => keys[e.code] = false);
 
+        // =========================
+        // 入力管理（動的ジョイスティック）
+        // =========================
         const joystickZone = document.getElementById('joystick-zone');
         const joystickStick = document.getElementById('joystick-stick');
         let joystick = {
             active: false,
             vector: { x: 0, y: 0 },
-            baseRect: null
+            startX: 0,
+            startY: 0,
+            touchId: null // 複数の指のタッチが混ざらないようにIDを管理
         };
 
-        function updateJoystick(touch) {
-            if (!joystick.baseRect) return;
-            const rect = joystick.baseRect;
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-            const maxRadius = rect.width / 2; 
+        const DEADZONE = 10;   // デッドゾーン（遊び）px（これ以下は動かない）
+        const MAX_RADIUS = 70; // 最大入力半径 px
 
-            let dx = touch.clientX - centerX;
-            let dy = touch.clientY - centerY;
-            let distance = Math.hypot(dx, dy);
-
-            if (distance > maxRadius) {
-                dx = (dx / distance) * maxRadius;
-                dy = (dy / distance) * maxRadius;
-            }
-
-            joystickStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-
-            joystick.vector.x = dx / maxRadius;
-            joystick.vector.y = dy / maxRadius;
-        }
-
-        joystickZone.addEventListener('touchstart', e => {
+        // キャンバス上のタッチイベントでのみ動作させる（UIボタンなどを妨害しないため）
+        canvas.addEventListener('touchstart', e => {
             e.preventDefault(); 
+            if (joystick.active) return;
+
+            // 最初の指の状態を記録
+            const touch = e.changedTouches[0];
             joystick.active = true;
-            joystick.baseRect = joystickZone.getBoundingClientRect();
-            updateJoystick(e.changedTouches[0]);
+            joystick.touchId = touch.identifier;
+            joystick.startX = touch.clientX;
+            joystick.startY = touch.clientY;
+            joystick.vector = { x: 0, y: 0 };
+
+            // その位置にジョイスティックを表示
+            joystickZone.style.left = joystick.startX + 'px';
+            joystickZone.style.top = joystick.startY + 'px';
+            joystickZone.style.display = 'block';
+            joystickStick.style.transform = `translate(-50%, -50%)`;
         }, {passive: false});
 
-        joystickZone.addEventListener('touchmove', e => {
+        canvas.addEventListener('touchmove', e => {
             e.preventDefault();
-            if (joystick.active) {
-                updateJoystick(e.changedTouches[0]);
+            if (!joystick.active) return;
+
+            // 対象の指の動きを抽出
+            let touch = Array.from(e.changedTouches).find(t => t.identifier === joystick.touchId);
+            if (!touch) return;
+
+            let dx = touch.clientX - joystick.startX;
+            let dy = touch.clientY - joystick.startY;
+            let distance = Math.hypot(dx, dy);
+
+            // デッドゾーンより内側の場合は動かない
+            if (distance <= DEADZONE) {
+                joystick.vector = { x: 0, y: 0 };
+                joystickStick.style.transform = `translate(-50%, -50%)`;
+                return;
             }
+
+            // 最大半径で制限（外に飛び出ないように）
+            let clampedDistance = Math.min(distance, MAX_RADIUS);
+            
+            // 方向の正規化ベクトル
+            let nx = dx / distance;
+            let ny = dy / distance;
+
+            // スティックの見た目上の移動
+            joystickStick.style.transform = `translate(calc(-50% + ${nx * clampedDistance}px), calc(-50% + ${ny * clampedDistance}px))`;
+
+            // 感度処理：距離(10～70) を 速さ(0.0～1.0) にスムーズに変換する
+            let magnitude = (clampedDistance - DEADZONE) / (MAX_RADIUS - DEADZONE);
+            joystick.vector.x = nx * magnitude;
+            joystick.vector.y = ny * magnitude;
         }, {passive: false});
 
         const endJoystick = e => {
-            e.preventDefault();
+            if (!joystick.active) return;
+            
+            let touch = Array.from(e.changedTouches).find(t => t.identifier === joystick.touchId);
+            if (!touch) return;
+
+            // 指が離れたら非表示にして移動をストップ
             joystick.active = false;
+            joystick.touchId = null;
             joystick.vector = { x: 0, y: 0 };
-            joystickStick.style.transform = `translate(-50%, -50%)`; 
+            joystickZone.style.display = 'none';
         };
 
-        joystickZone.addEventListener('touchend', endJoystick);
-        joystickZone.addEventListener('touchcancel', endJoystick);
-
+        canvas.addEventListener('touchend', endJoystick);
+        canvas.addEventListener('touchcancel', endJoystick);
 
         // =========================
         // ゲームステートとオブジェクト
@@ -400,7 +432,7 @@
             enemies.push({
                 x: x, 
                 y: y, 
-                size: 36, // bumster.png が目立つように大きめに設定
+                size: 36, 
                 speed: (1.5 + Math.random() * 0.5) * speedMultiplier,
                 hp: 1 * hpMultiplier,
                 damage: 10
@@ -428,7 +460,7 @@
                     targetAngle: targetAngle,
                     angle: player.attackAngle,
                     radius: player.attackRange,
-                    duration: 15, // 派手に見せるために少し表示時間を延長
+                    duration: 15,
                     maxDuration: 15
                 });
 
@@ -620,21 +652,15 @@
             ctx.save();
             ctx.translate(player.x, player.y);
 
-            // =========================
-            // もっと派手な斬撃エフェクト描画
-            // =========================
             for (let s of slashes) {
-                let progress = s.duration / s.maxDuration; // 1.0 -> 0.0
+                let progress = s.duration / s.maxDuration; 
 
                 ctx.save();
-                // 派手にするため「加算合成」を使用して発光させる
                 ctx.globalCompositeOperation = "lighter";
                 
-                // ネオンのようなグロー効果
                 ctx.shadowBlur = 30 * progress;
-                ctx.shadowColor = "#00ffff"; // シアン系の輝き
+                ctx.shadowColor = "#00ffff"; 
 
-                // 外側の太い光の刃
                 ctx.beginPath();
                 ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
                 ctx.lineWidth = 25 * progress;
@@ -642,7 +668,6 @@
                 ctx.strokeStyle = `rgba(0, 200, 255, ${ progress })`;
                 ctx.stroke();
 
-                // 内側の眩しいコア（芯）
                 ctx.beginPath();
                 ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
                 ctx.lineWidth = 8 * progress;
@@ -650,14 +675,13 @@
                 ctx.strokeStyle = `rgba(255, 255, 255, ${ progress })`;
                 ctx.stroke();
 
-                // 残像の面部分（薄い光）
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
                 ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
                 ctx.fillStyle = `rgba(0, 255, 255, ${ 0.3 * progress })`;
                 ctx.fill();
 
-                ctx.restore(); // ブレンドモードとシャドウをリセット
+                ctx.restore(); 
             }
 
             if (player.invincibleTimer === 0 || game.frameCount % 10 < 5) {
