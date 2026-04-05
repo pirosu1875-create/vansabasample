@@ -12,8 +12,8 @@
             color: #fff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             user-select: none;
-            -webkit-user-select: none; /* Safariでのスマホ長押し選択を防止 */
-            touch-action: none; /* 意図しないスクロールやスワイプ戻る操作を防止 */
+            -webkit-user-select: none;
+            touch-action: none; 
         }
         canvas {
             display: block;
@@ -62,18 +62,20 @@
             text-shadow: 1px 1px 2px #000;
             margin-top: 10px;
         }
+        
         /* バーチャルジョイスティックUI */
         #joystick-zone {
             position: absolute;
             bottom: 40px;
-            left: 40px;
+            left: 50%;
+            transform: translateX(-50%); /* 画面中央下部に配置 */
             width: 140px;
             height: 140px;
             border-radius: 50%;
             background: rgba(255, 255, 255, 0.15);
             border: 2px solid rgba(255, 255, 255, 0.3);
             z-index: 10;
-            touch-action: none; /* 念のためのタッチイベント固定 */
+            touch-action: none; 
         }
         #joystick-stick {
             position: absolute;
@@ -84,7 +86,7 @@
             border-radius: 50%;
             background: rgba(255, 255, 255, 0.6);
             transform: translate(-50%, -50%);
-            pointer-events: none; /* コンテナ側にドラッグイベントを渡す */
+            pointer-events: none; 
             box-shadow: 0 4px 8px rgba(0,0,0,0.5);
         }
 
@@ -180,7 +182,7 @@
         </div>
     </div>
     
-    <!-- 左下のバーチャルジョイスティック -->
+    <!-- 中央下部のバーチャルジョイスティック -->
     <div id="joystick-zone">
         <div id="joystick-stick"></div>
     </div>
@@ -224,7 +226,6 @@
         window.addEventListener('keydown', e => keys[e.code] = true);
         window.addEventListener('keyup', e => keys[e.code] = false);
 
-        // ジョイスティック変数
         const joystickZone = document.getElementById('joystick-zone');
         const joystickStick = document.getElementById('joystick-stick');
         let joystick = {
@@ -233,19 +234,17 @@
             baseRect: null
         };
 
-        // スティックの更新処理
         function updateJoystick(touch) {
             if (!joystick.baseRect) return;
             const rect = joystick.baseRect;
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
-            const maxRadius = rect.width / 2; // 操作可能範囲
+            const maxRadius = rect.width / 2; 
 
             let dx = touch.clientX - centerX;
             let dy = touch.clientY - centerY;
             let distance = Math.hypot(dx, dy);
 
-            // 操作範囲を飛び出ないように制限
             if (distance > maxRadius) {
                 dx = (dx / distance) * maxRadius;
                 dy = (dy / distance) * maxRadius;
@@ -253,14 +252,12 @@
 
             joystickStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
 
-            // -1 〜 1 の正規化されたベクトルとして保存（移動計算用）
             joystick.vector.x = dx / maxRadius;
             joystick.vector.y = dy / maxRadius;
         }
 
-        // タッチイベントの設定
         joystickZone.addEventListener('touchstart', e => {
-            e.preventDefault(); // スクロール防止
+            e.preventDefault(); 
             joystick.active = true;
             joystick.baseRect = joystickZone.getBoundingClientRect();
             updateJoystick(e.changedTouches[0]);
@@ -277,7 +274,7 @@
             e.preventDefault();
             joystick.active = false;
             joystick.vector = { x: 0, y: 0 };
-            joystickStick.style.transform = `translate(-50%, -50%)`; // 中央に戻す
+            joystickStick.style.transform = `translate(-50%, -50%)`; 
         };
 
         joystickZone.addEventListener('touchend', endJoystick);
@@ -305,17 +302,17 @@
             speed: 3.5,
             hp: 100, 
             maxHp: 100, 
-            attackCooldown: 60, // 攻撃（斬撃）間隔
+            attackCooldown: 60, 
             attackTimer: 0,
             damage: 2,
-            attackRange: 80, // 斬撃の届く距離（半径）
-            attackAngle: Math.PI * 0.5, // 初期角度（90度）
+            attackRange: 80, 
+            attackAngle: Math.PI * 0.5, 
             invincibleTimer: 0,
             imageLoaded: false
         };
 
         let enemies = [];
-        let slashes = []; // 斬撃エフェクトの配列
+        let slashes = []; 
         let expOrbs = [];
 
         const hpBar = document.getElementById('hp-bar');
@@ -330,27 +327,52 @@
         // =========================
         // 画像のプリロード
         // =========================
+        let totalImagesToLoad = 2;
+        let imagesLoaded = 0;
+
+        function checkGameReady() {
+            imagesLoaded++;
+            if (imagesLoaded >= totalImagesToLoad) {
+                game.state = 'PLAYING';
+                loadingModal.style.display = 'none';
+                loop(); 
+            }
+        }
+
+        // プレイヤー画像の読み込み
         const playerImage = new Image();
-        playerImage.src = 'kugaplayer.png';
+        playerImage.src = 'kuga.png';
 
         playerImage.onload = () => {
             player.imageLoaded = true;
             let aspect = playerImage.width / playerImage.height;
             player.height = 48;
             player.width = 48 * aspect;
-            game.state = 'PLAYING';
-            loadingModal.style.display = 'none';
-            loop(); 
+            checkGameReady();
         };
 
         playerImage.onerror = () => {
-            console.error("kugaplayer.pngが見つかりません。デフォルトの緑四角で代用します。");
+            console.error("kuga.pngが見つかりません。デフォルトの緑四角で代用します。");
             player.width = 48;
             player.height = 48;
             player.imageLoaded = false;
-            game.state = 'PLAYING';
-            loadingModal.style.display = 'none';
-            loop();
+            checkGameReady();
+        };
+
+        // 敵画像の読み込み
+        const enemyImage = new Image();
+        enemyImage.src = 'bumster.png';
+        let enemyImageLoaded = false;
+
+        enemyImage.onload = () => {
+            enemyImageLoaded = true;
+            checkGameReady();
+        };
+
+        enemyImage.onerror = () => {
+            console.error("bumster.pngが見つかりません。デフォルトの赤四角で代用します。");
+            enemyImageLoaded = false;
+            checkGameReady();
         };
 
         // ユーティリティ計算
@@ -378,14 +400,13 @@
             enemies.push({
                 x: x, 
                 y: y, 
-                size: 20,
+                size: 36, // bumster.png が目立つように大きめに設定
                 speed: (1.5 + Math.random() * 0.5) * speedMultiplier,
                 hp: 1 * hpMultiplier,
                 damage: 10
             });
         }
 
-        // 近接斬撃の発動処理
         function fireSlash() {
             if (enemies.length === 0) return;
             
@@ -407,8 +428,8 @@
                     targetAngle: targetAngle,
                     angle: player.attackAngle,
                     radius: player.attackRange,
-                    duration: 12,
-                    maxDuration: 12
+                    duration: 15, // 派手に見せるために少し表示時間を延長
+                    maxDuration: 15
                 });
 
                 for (let i = enemies.length - 1; i >= 0; i--) {
@@ -439,10 +460,7 @@
             if (game.state !== 'PLAYING') return;
             game.frameCount++;
 
-            // プレイヤーの移動処理
             let dx = 0, dy = 0;
-            
-            // 1. キーボードの入力を判定
             if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
             if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
             if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
@@ -453,7 +471,6 @@
                 dx /= len; dy /= len;
             }
 
-            // 2. ジョイスティックの入力があれば上書きする
             if (joystick.active) {
                 dx = joystick.vector.x;
                 dy = joystick.vector.y;
@@ -462,20 +479,17 @@
             player.x += dx * player.speed;
             player.y += dy * player.speed;
             
-            // 画面外への飛び出し防止
             player.x = Math.max(player.width / 2, Math.min(width - player.width / 2, player.x));
             player.y = Math.max(player.height / 2, Math.min(height - player.height / 2, player.y));
 
             if (player.invincibleTimer > 0) player.invincibleTimer--;
 
-            // 自動斬撃のタイマー
             player.attackTimer++;
             if (player.attackTimer >= player.attackCooldown) {
                 fireSlash();
                 player.attackTimer = 0;
             }
 
-            // 斬撃エフェクトの更新
             for (let i = slashes.length - 1; i >= 0; i--) {
                 slashes[i].duration--;
                 if (slashes[i].duration <= 0) {
@@ -483,14 +497,12 @@
                 }
             }
 
-            // 敵のスポーン
             let currentSpawnRate = Math.max(10, game.baseSpawnRate - game.level * 3);
             if (game.frameCount % currentSpawnRate === 0) {
                 spawnEnemy();
                 if (game.level >= 5) spawnEnemy();
             }
 
-            // 敵の移動・被弾計算
             for (let i = enemies.length - 1; i >= 0; i--) {
                 let e = enemies[i];
                 let angle = Math.atan2(player.y - e.y, player.x - e.x);
@@ -499,7 +511,7 @@
 
                 if (player.invincibleTimer === 0 && checkCollisionRect(player.x, player.y, player.width, player.height, e.x, e.y, e.size, e.size)) {
                     player.hp -= e.damage;
-                    player.invincibleTimer = 30; // 被弾後の無敵時間
+                    player.invincibleTimer = 30; 
                     
                     if (player.hp <= 0) {
                         player.hp = 0;
@@ -509,7 +521,6 @@
                 }
             }
 
-            // 経験値オーブ引き寄せ＆取得
             let pickupRadius = Math.max(player.width, player.height) + 30; 
             for (let i = expOrbs.length - 1; i >= 0; i--) {
                 let o = expOrbs[i];
@@ -597,27 +608,56 @@
                 ctx.fill();
             }
 
-            ctx.fillStyle = '#e74c3c';
             for (let e of enemies) {
-                ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                if (enemyImageLoaded) {
+                    ctx.drawImage(enemyImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                } else {
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                }
             }
 
             ctx.save();
             ctx.translate(player.x, player.y);
 
+            // =========================
+            // もっと派手な斬撃エフェクト描画
+            // =========================
             for (let s of slashes) {
+                let progress = s.duration / s.maxDuration; // 1.0 -> 0.0
+
+                ctx.save();
+                // 派手にするため「加算合成」を使用して発光させる
+                ctx.globalCompositeOperation = "lighter";
+                
+                // ネオンのようなグロー効果
+                ctx.shadowBlur = 30 * progress;
+                ctx.shadowColor = "#00ffff"; // シアン系の輝き
+
+                // 外側の太い光の刃
                 ctx.beginPath();
                 ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
-                ctx.lineWidth = Math.max(1, 15 * (s.duration / s.maxDuration));
+                ctx.lineWidth = 25 * progress;
                 ctx.lineCap = "round";
-                ctx.strokeStyle = `rgba(255, 255, 255, ${s.duration / s.maxDuration})`;
+                ctx.strokeStyle = `rgba(0, 200, 255, ${ progress })`;
                 ctx.stroke();
 
+                // 内側の眩しいコア（芯）
+                ctx.beginPath();
+                ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
+                ctx.lineWidth = 8 * progress;
+                ctx.lineCap = "round";
+                ctx.strokeStyle = `rgba(255, 255, 255, ${ progress })`;
+                ctx.stroke();
+
+                // 残像の面部分（薄い光）
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
                 ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
-                ctx.fillStyle = `rgba(200, 255, 255, ${0.4 * (s.duration / s.maxDuration)})`;
+                ctx.fillStyle = `rgba(0, 255, 255, ${ 0.3 * progress })`;
                 ctx.fill();
+
+                ctx.restore(); // ブレンドモードとシャドウをリセット
             }
 
             if (player.invincibleTimer === 0 || game.frameCount % 10 < 5) {
