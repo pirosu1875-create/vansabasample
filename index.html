@@ -9,6 +9,9 @@
             margin: 0;
             overflow: hidden;
             background-color: #1a1a1a;
+            background-image: url('background.png');
+            background-size: cover;
+            background-position: center;
             color: #fff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             user-select: none;
@@ -323,7 +326,8 @@
             kills: 0,
             state: 'LOADING',
             frameCount: 0,
-            baseSpawnRate: 70
+            baseSpawnRate: 70,
+            bossSpawned: false
         };
 
         let player = {
@@ -346,6 +350,7 @@
         let enemies = [];
         let slashes = []; 
         let expOrbs = [];
+        let healthPotions = [];
 
         const hpBar = document.getElementById('hp-bar');
         const expBar = document.getElementById('exp-bar');
@@ -439,6 +444,63 @@
             });
         }
 
+        function spawnBoss() {
+            let hpMultiplier = 1 + Math.floor(game.level / 3);
+            enemies.push({
+                x: width / 2, 
+                y: -100, 
+                size: 100, 
+                speed: 1.0,
+                hp: 150 * hpMultiplier,
+                damage: 30,
+                isBoss: true
+            });
+            const bossAlert = document.createElement('div');
+            bossAlert.innerText = 'WARNING: BOSS APPROACHING!';
+            bossAlert.style.position = 'absolute';
+            bossAlert.style.top = '100px';
+            bossAlert.style.left = '50%';
+            bossAlert.style.transform = 'translate(-50%, -50%)';
+            bossAlert.style.color = '#e74c3c';
+            bossAlert.style.fontSize = '48px';
+            bossAlert.style.fontWeight = 'bold';
+            bossAlert.style.textShadow = '2px 2px 4px #000';
+            bossAlert.style.zIndex = '30';
+            document.body.appendChild(bossAlert);
+            setTimeout(() => {
+                if(document.body.contains(bossAlert)) {
+                    document.body.removeChild(bossAlert);
+                }
+            }, 3000);
+        }
+
+        function triggerGameClear() {
+            game.state = 'GAMECLEAR';
+            
+            const gameClearModal = document.createElement('div');
+            gameClearModal.style.position = 'absolute';
+            gameClearModal.style.top = '0';
+            gameClearModal.style.left = '0';
+            gameClearModal.style.width = '100vw';
+            gameClearModal.style.height = '100vh';
+            gameClearModal.style.background = 'rgba(0, 0, 0, 0.7)';
+            gameClearModal.style.display = 'flex';
+            gameClearModal.style.flexDirection = 'column';
+            gameClearModal.style.justifyContent = 'center';
+            gameClearModal.style.alignItems = 'center';
+            gameClearModal.style.zIndex = '20';
+            
+            gameClearModal.innerHTML = `
+                <h1 style="color: #f1c40f; font-size:48px; text-shadow: 2px 2px 4px #000; margin-bottom: 30px;">GAME CLEAR!</h1>
+                <div style="font-size: 24px; margin-bottom: 30px; color:#fff;">
+                    到達レベル: <span style="font-weight:bold; color:#f1c40f;">${game.level}</span><br>
+                    討伐数: <span style="font-weight:bold; color:#f1c40f;">${game.kills}</span>
+                </div>
+                <button onclick="location.reload()" style="padding: 15px 40px; font-size: 24px; cursor: pointer; border: none; border-radius: 10px; background: #3498db; color: white; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.5);">もう一度プレイ</button>
+            `;
+            document.body.appendChild(gameClearModal);
+        }
+
         function fireSlash() {
             if (enemies.length === 0) return;
             
@@ -478,7 +540,13 @@
                             e.hp -= player.damage;
                             
                             if (e.hp <= 0) {
+                                if (e.isBoss) {
+                                    triggerGameClear();
+                                }
                                 expOrbs.push({ x: e.x, y: e.y, radius: 4, value: 1 });
+                                if (Math.random() < 0.10) {
+                                    healthPotions.push({ x: e.x, y: e.y, radius: 10 });
+                                }
                                 enemies.splice(i, 1);
                                 game.kills++;
                             }
@@ -529,6 +597,11 @@
                 }
             }
 
+            if (game.kills >= 30 && !game.bossSpawned) {
+                game.bossSpawned = true;
+                spawnBoss();
+            }
+
             let currentSpawnRate = Math.max(10, game.baseSpawnRate - game.level * 3);
             if (game.frameCount % currentSpawnRate === 0) {
                 spawnEnemy();
@@ -568,6 +641,15 @@
                         expOrbs.splice(i, 1);
                         checkLevelUp();
                     }
+                }
+            }
+
+            for (let i = healthPotions.length - 1; i >= 0; i--) {
+                let p = healthPotions[i];
+                let dist = getDistance(player.x, player.y, p.x, p.y);
+                if (dist < player.width / 2 + p.radius) {
+                    player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.5);
+                    healthPotions.splice(i, 1);
                 }
             }
 
@@ -638,6 +720,20 @@
                 ctx.beginPath();
                 ctx.arc(o.x, o.y, o.radius, 0, Math.PI * 2);
                 ctx.fill();
+            }
+
+            for (let p of healthPotions) {
+                ctx.fillStyle = '#2ecc71';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(p.x - 4, p.y - 1, 8, 2);
+                ctx.fillRect(p.x - 1, p.y - 4, 2, 8);
             }
 
             for (let e of enemies) {
