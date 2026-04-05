@@ -1,120 +1,291 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2Dサバイバーゲーム</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>World Trigger Survivor</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #1a1a1a;
-            background-image: url('background.png');
-            background-size: cover;
-            background-position: center;
+            background-color: #111;
             color: #fff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: none; 
+            touch-action: none;
         }
+
         canvas {
             display: block;
         }
-        #ui {
+
+        #ui-container {
             position: absolute;
-            top: 20px;
-            left: 20px;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             pointer-events: none;
             z-index: 10;
         }
+
+        .status-box {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 15px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border: 1px solid #444;
+        }
+
         .bar-container {
-            width: 300px;
-            height: 24px;
-            background: #444;
-            border: 2px solid #fff;
-            border-radius: 12px;
+            width: 150px;
+            height: 15px;
+            background: #333;
+            border-radius: 10px;
             overflow: hidden;
-            margin-bottom: 8px;
             position: relative;
         }
-        #hp-bar {
-            background: #e74c3c;
+
+        #trion-bar {
+            background: #2ecc71;
             width: 100%;
             height: 100%;
             transition: width 0.2s;
+            box-shadow: 0 0 10px #2ecc71;
         }
+
         #exp-bar {
-            background: #3498db;
+            background: #f1c40f;
             width: 0%;
             height: 100%;
             transition: width 0.2s;
         }
+
         .bar-label {
-            position: absolute;
-            top: 0;
-            left: 10px;
-            line-height: 24px;
-            font-size: 14px;
-            font-weight: bold;
-            text-shadow: 1px 1px 2px #000;
-        }
-        #stats {
-            font-size: 18px;
-            font-weight: bold;
-            text-shadow: 1px 1px 2px #000;
-            margin-top: 10px;
-        }
-        
-        /* フローティング（動的）バーチャルジョイスティックUI */
-        #joystick-zone {
-            position: absolute;
-            width: 140px;
-            height: 140px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.15);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            z-index: 10;
-            display: none; /* デフォルトは非表示 */
-            pointer-events: none; /* タッチイベントはキャンバスで処理する */
-            transform: translate(-50%, -50%); /* 基準とするleft/topが円の中心になるように調整 */
-            touch-action: none; 
-        }
-        #joystick-stick {
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.6);
-            transform: translate(-50%, -50%); /* 中心に配置 */
-            pointer-events: none; 
-            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            transform: translate(-50%, -50%);
+            font-size: 10px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 1px 1px 2px #000;
         }
 
-        #loading-modal, #level-up-modal, #game-over-modal {
+        .text-status {
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        #trigger-slots {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            text-align: right;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .trigger-slot {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 5px 10px;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 14px;
+            border-radius: 5px;
+        }
+
+        #slot-mr,
+        #slot-sr {
+            border: 1px solid #2ecc71;
+            color: #2ecc71;
+        }
+
+        #slot-ml,
+        #slot-sl {
+            border: 1px solid #3498db;
+            color: #3498db;
+        }
+
+        #prep-modal {
             position: absolute;
             top: 0;
             left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0, 0, 0, 0.7);
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 30, 60, 0.95);
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+            justify-content: center;
+            z-index: 150;
             display: none;
+            color: #00ffff;
+            border: 4px solid #0055ff;
+            box-sizing: border-box;
+        }
+
+        .prep-left {
+            width: 40%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-right: 2px solid #00ffff;
+            padding: 20px;
+        }
+
+        .prep-right {
+            width: 60%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        #char-preview {
+            width: 250px;
+            height: 350px;
+            object-fit: contain;
+            margin-bottom: 20px;
+            border: 1px solid #00ffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            background: rgba(0, 255, 255, 0.05);
+        }
+
+        .char-info {
+            font-size: 18px;
+            line-height: 1.8;
+            color: #fff;
+            width: 60%;
+            text-align: left;
+            background: rgba(0, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .char-info span {
+            color: #00ffff;
+            font-weight: bold;
+        }
+
+        .prep-title {
+            font-size: 36px;
+            text-shadow: 0 0 15px #00ffff;
+            margin-bottom: 30px;
+            letter-spacing: 5px;
+            text-align: center;
+        }
+
+        .prep-slot {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 400px;
+            background: rgba(0, 255, 255, 0.1);
+            padding: 10px 20px;
+            border: 1px solid #00ffff;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        .prep-slot select {
+            background: #002244;
+            color: #00ffff;
+            border: 1px solid #00ffff;
+            font-size: 18px;
+            padding: 5px;
+            width: 180px;
+            outline: none;
+        }
+
+        #boost-btn {
+            margin-top: 30px;
+            padding: 15px 50px;
+            font-size: 24px;
+            font-weight: bold;
+            background: #0044ff;
+            color: #00ffff;
+            border: 2px solid #00ffff;
+            border-radius: 10px;
+            cursor: pointer;
+            text-shadow: 0 0 5px #fff;
+            box-shadow: 0 0 15px #0044ff;
+            transition: 0.2s;
+        }
+
+        #boost-btn:hover {
+            background: #0066ff;
+            transform: scale(1.05);
+        }
+
+        #joystick-zone {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: auto;
+            z-index: 5;
+            display: none;
+        }
+
+        #joystick-stick {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        #level-up-modal,
+        #game-over-modal,
+        #loading-modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 20;
+            z-index: 100;
+            display: none;
         }
+
+        #level-up-modal,
+        #game-over-modal {
+            z-index: 100;
+        }
+
         #loading-modal {
             display: flex;
+            z-index: 200;
         }
-        h1 {
-            font-size: 48px;
-            margin-bottom: 30px;
-            text-shadow: 2px 2px 4px #000;
+
+        #level-up-modal h1 {
             color: #f1c40f;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #f1c40f;
         }
+
         .card-container {
             display: flex;
             gap: 20px;
@@ -122,70 +293,100 @@
             justify-content: center;
             max-width: 800px;
         }
+
         .upgrade-card {
-            background: #333;
-            border: 3px solid #f1c40f;
-            border-radius: 15px;
+            background: #2c3e50;
             padding: 20px;
-            width: 200px;
+            border-radius: 10px;
+            width: 220px;
             text-align: center;
             cursor: pointer;
-            transition: transform 0.2s, background 0.2s;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
-            pointer-events: auto;
+            border: 2px solid #34495e;
+            transition: all 0.2s;
         }
+
         .upgrade-card:hover {
-            transform: translateY(-10px) scale(1.05);
-            background: #444;
+            transform: scale(1.05);
+            border-color: #f1c40f;
+            box-shadow: 0 0 15px rgba(241, 196, 15, 0.5);
+            background: #34495e;
         }
+
         .upgrade-card h3 {
-            margin: 0 0 15px 0;
-            color: #f1c40f;
-            font-size: 22px;
-        }
-        .upgrade-card p {
+            color: #3498db;
+            margin-top: 0;
             font-size: 16px;
-            line-height: 1.5;
         }
-        button.retry-btn {
-            padding: 15px 40px;
-            font-size: 24px;
-            cursor: pointer;
-            border: none;
-            border-radius: 10px;
-            background: #e74c3c;
-            color: white;
-            font-weight: bold;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
-            transition: background 0.2s;
-            pointer-events: auto;
+
+        .upgrade-card p {
+            font-size: 13px;
+            color: #bdc3c7;
+            line-height: 1.4;
         }
-        button.retry-btn:hover {
-            background: #c0392b;
-        }
+
         .result-text {
             font-size: 24px;
             margin-bottom: 30px;
+            color: #fff;
+        }
+
+        .result-text span {
+            font-weight: bold;
+            color: #f1c40f;
         }
     </style>
 </head>
+
 <body>
-    <div id="ui">
-        <div class="bar-container">
-            <div id="hp-bar"></div>
-            <div class="bar-label">HP</div>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-container">
+        <div class="status-box">
+            <div class="bar-container">
+                <div id="trion-bar"></div>
+                <div class="bar-label">Trion</div>
+            </div>
+            <div class="bar-container">
+                <div id="exp-bar"></div>
+                <div class="bar-label">EXP</div>
+            </div>
         </div>
-        <div class="bar-container" style="height: 16px;">
-            <div id="exp-bar"></div>
-            <div class="bar-label" style="line-height: 16px; font-size: 12px;">EXP</div>
-        </div>
-        <div id="stats">
-            Level: <span id="level">1</span><br>
-            Kills: <span id="kills">0</span>
+        <div class="status-box">
+            <div class="text-status">LV: <span id="level">1</span></div>
+            <div class="text-status">KILLS: <span id="kills">0</span></div>
         </div>
     </div>
-    
-    <!-- タッチした位置に出現する動的ジョイスティック -->
+
+    <div id="trigger-slots">
+        <div class="trigger-slot" id="slot-mr">Main R: <span id="trig-mr" style="color:#fff;">-</span></div>
+        <div class="trigger-slot" id="slot-sr">Sub R: <span id="trig-sr" style="color:#fff;">-</span></div>
+        <div class="trigger-slot" id="slot-ml">Main L: <span id="trig-ml" style="color:#fff;">-</span></div>
+        <div class="trigger-slot" id="slot-sl">Sub L: <span id="trig-sl" style="color:#fff;">-</span></div>
+    </div>
+
+    <div id="prep-modal">
+        <div class="prep-left">
+            <div class="prep-title" style="font-size:28px;">PROFILE</div>
+            <img id="char-preview" src="kuga.png" alt="Image Not Found">
+            <div class="char-info" id="char-info-text"></div>
+        </div>
+        <div class="prep-right">
+            <div class="prep-title">BRIEFING ROOM</div>
+            <div class="prep-slot" style="margin-bottom: 30px;">
+                <span>CHARACTER</span>
+                <select id="sel-char" onchange="onCharChange()">
+                    <option value="yuma">空閑遊真</option>
+                    <option value="osamu">三雲修</option>
+                </select>
+            </div>
+            <div class="prep-slot"><span>MAIN (Right)</span><select id="sel-mr"></select></div>
+            <div class="prep-slot"><span>SUB (Right)</span><select id="sel-sr"></select></div>
+            <div class="prep-slot"><span>MAIN (Left)</span><select id="sel-ml"></select></div>
+            <div class="prep-slot"><span>SUB (Left)</span><select id="sel-sl"></select></div>
+            <button id="boost-btn" onclick="startBoost()">BOOST ON</button>
+        </div>
+    </div>
+
     <div id="joystick-zone">
         <div id="joystick-stick"></div>
     </div>
@@ -195,118 +396,93 @@
     </div>
 
     <div id="level-up-modal">
-        <h1>LEVEL UP!</h1>
+        <h1>TRIGGER Customization</h1>
         <div class="card-container" id="upgrade-cards"></div>
     </div>
 
     <div id="game-over-modal">
-        <h1 style="color: #e74c3c;">GAME OVER</h1>
+        <h1 style="color: #f39c12; font-size: 50px; text-shadow: 0 0 15px #f39c12;">緊急脱出<br>BAIL OUT</h1>
         <div class="result-text">
-            到達レベル: <span id="final-level" style="font-weight:bold; color:#f1c40f;"></span><br>
-            討伐数: <span id="final-kills" style="font-weight:bold; color:#f1c40f;"></span>
+            到達レベル: <span id="final-level"></span><br><br>
+            討伐数: <span id="final-kills"></span>
         </div>
-        <button class="retry-btn" onclick="location.reload()">もう一度プレイ</button>
+        <button onclick="location.reload()"
+            style="padding: 15px 40px; font-size: 24px; cursor: pointer; border: none; border-radius: 10px; background: #3498db; color: white; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.5);">もう一度プレイ</button>
     </div>
 
-    <canvas id="game"></canvas>
-
     <script>
-        const canvas = document.getElementById('game');
+        const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        let width, height;
-        function resize() {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
 
-        // =========================
-        // 入力管理（キーボード）
-        // =========================
-        const keys = {};
+        window.addEventListener('resize', () => {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        });
+
+        // 仮想ジョイスティック設定
+        let joystick = {
+            active: false,
+            touchId: null,
+            origin: { x: 0, y: 0 },
+            vector: { x: 0, y: 0 },
+            maxRadius: 50
+        };
+
+        const joystickZone = document.getElementById('joystick-zone');
+        const joystickStick = document.getElementById('joystick-stick');
+
+        let keys = {};
         window.addEventListener('keydown', e => keys[e.code] = true);
         window.addEventListener('keyup', e => keys[e.code] = false);
 
-        // =========================
-        // 入力管理（動的ジョイスティック）
-        // =========================
-        const joystickZone = document.getElementById('joystick-zone');
-        const joystickStick = document.getElementById('joystick-stick');
-        let joystick = {
-            active: false,
-            vector: { x: 0, y: 0 },
-            startX: 0,
-            startY: 0,
-            touchId: null // 複数の指のタッチが混ざらないようにIDを管理
-        };
-
-        const DEADZONE = 10;   // デッドゾーン（遊び）px（これ以下は動かない）
-        const MAX_RADIUS = 70; // 最大入力半径 px
-
-        // キャンバス上のタッチイベントでのみ動作させる（UIボタンなどを妨害しないため）
         canvas.addEventListener('touchstart', e => {
-            e.preventDefault(); 
             if (joystick.active) return;
-
-            // 最初の指の状態を記録
-            const touch = e.changedTouches[0];
+            let touch = e.changedTouches[0];
             joystick.active = true;
             joystick.touchId = touch.identifier;
-            joystick.startX = touch.clientX;
-            joystick.startY = touch.clientY;
+            joystick.origin = { x: touch.clientX, y: touch.clientY };
             joystick.vector = { x: 0, y: 0 };
 
-            // その位置にジョイスティックを表示
-            joystickZone.style.left = joystick.startX + 'px';
-            joystickZone.style.top = joystick.startY + 'px';
             joystickZone.style.display = 'block';
-            joystickStick.style.transform = `translate(-50%, -50%)`;
-        }, {passive: false});
+            joystickStick.style.left = touch.clientX + 'px';
+            joystickStick.style.top = touch.clientY + 'px';
+        }, { passive: false });
 
         canvas.addEventListener('touchmove', e => {
-            e.preventDefault();
             if (!joystick.active) return;
-
-            // 対象の指の動きを抽出
+            e.preventDefault();
             let touch = Array.from(e.changedTouches).find(t => t.identifier === joystick.touchId);
             if (!touch) return;
 
-            let dx = touch.clientX - joystick.startX;
-            let dy = touch.clientY - joystick.startY;
-            let distance = Math.hypot(dx, dy);
+            let dx = touch.clientX - joystick.origin.x;
+            let dy = touch.clientY - joystick.origin.y;
+            let dist = Math.hypot(dx, dy);
 
-            // デッドゾーンより内側の場合は動かない
-            if (distance <= DEADZONE) {
-                joystick.vector = { x: 0, y: 0 };
-                joystickStick.style.transform = `translate(-50%, -50%)`;
-                return;
-            }
+            let magnitude = Math.min(dist, joystick.maxRadius) / joystick.maxRadius;
+            let nx = dist > 0 ? dx / dist : 0;
+            let ny = dist > 0 ? dy / dist : 0;
 
-            // 最大半径で制限（外に飛び出ないように）
-            let clampedDistance = Math.min(distance, MAX_RADIUS);
-            
-            // 方向の正規化ベクトル
-            let nx = dx / distance;
-            let ny = dy / distance;
+            let stickX = joystick.origin.x + nx * (Math.min(dist, joystick.maxRadius));
+            let stickY = joystick.origin.y + ny * (Math.min(dist, joystick.maxRadius));
 
-            // スティックの見た目上の移動
-            joystickStick.style.transform = `translate(calc(-50% + ${nx * clampedDistance}px), calc(-50% + ${ny * clampedDistance}px))`;
+            joystickStick.style.left = stickX + 'px';
+            joystickStick.style.top = stickY + 'px';
 
-            // 感度処理：距離(10～70) を 速さ(0.0～1.0) にスムーズに変換する
-            let magnitude = (clampedDistance - DEADZONE) / (MAX_RADIUS - DEADZONE);
             joystick.vector.x = nx * magnitude;
             joystick.vector.y = ny * magnitude;
-        }, {passive: false});
+        }, { passive: false });
 
         const endJoystick = e => {
             if (!joystick.active) return;
-            
             let touch = Array.from(e.changedTouches).find(t => t.identifier === joystick.touchId);
             if (!touch) return;
-
-            // 指が離れたら非表示にして移動をストップ
             joystick.active = false;
             joystick.touchId = null;
             joystick.vector = { x: 0, y: 0 };
@@ -327,318 +503,406 @@
             state: 'LOADING',
             frameCount: 0,
             baseSpawnRate: 70,
-            midBossSpawned: false,
-            finalBossSpawned: false,
             nextMidBossKill: 30,
             finalBossKills: 0,
-            nextFinalBossKill: 100
+            nextFinalBossKill: 100,
+            bailoutVelocity: 0
         };
 
         let player = {
-            x: width / 2, 
-            y: height / 2, 
-            width: 48, 
-            height: 48,
-            speed: 3.5,
-            hp: 100, 
-            maxHp: 100, 
-            attackCooldown: 60, 
-            attackTimer: 0,
-            damage: 2,
-            attackRange: 80, 
-            attackAngle: Math.PI * 0.5, 
-            invincibleTimer: 0,
-            imageLoaded: false,
-            
-            hasProjectile: false,
-            projectileSpeed: 5,
-            projectileSize: 8,
-            projectileRange: 300,
-            projectileCooldown: 60,
-            projectileTimer: 0,
-            projectileDamageMult: 0.8,
-            
-            hasShield: false,
-            shieldAngle: 0,
-            shieldSpeed: 0.05,
-            shieldRadius: 60,
-            shieldSize: 15,
-            shieldDamage: 1,
-            shieldCount: 0
+            x: width / 2, y: height / 2, width: 48, height: 48, speed: 3.5,
+            hp: 100, maxHp: 100, invincibleTimer: 0, imageLoaded: false,
+            triggers: { mr: null, sr: null, ml: null, sl: null }
         };
 
-        let enemies = [];
-        let slashes = []; 
-        let expOrbs = [];
-        let healthPotions = [];
-        let projectiles = [];
+        const T_INFO = {
+            scorpion: { cooldown: 20, range: 70, damage: 1.5, angle: Math.PI / 4, color: '#f1c40f' },
+            kogetsu: { cooldown: 45, range: 120, damage: 4.0, angle: Math.PI / 1.5, color: '#3498db' },
+            asteroid: { cooldown: 40, range: 200, damage: 1, speed: 8 },
+            shield: { cooldown: 900, range: 80, duration: 20, maxDur: 3 },
+            // ↓ここに追加しました！
+            grasshopper: { cooldown: 120 }, // 機動用：約2秒に1回ジャンプ
+            raygust: { cooldown: 60, range: 110, damage: 2.5, angle: Math.PI, color: '#e67e22' } // 防御力高めの重い刃
+        };
 
-        const hpBar = document.getElementById('hp-bar');
-        const expBar = document.getElementById('exp-bar');
-        const levelSpan = document.getElementById('level');
-        const killsSpan = document.getElementById('kills');
-        const levelUpModal = document.getElementById('level-up-modal');
-        const upgradeCards = document.getElementById('upgrade-cards');
-        const gameOverModal = document.getElementById('game-over-modal');
-        const loadingModal = document.getElementById('loading-modal');
+        let triggerState = { mr: { timer: 0, dur: 3 }, sr: { timer: 0, dur: 3 }, ml: { timer: 0, dur: 3 }, sl: { timer: 0, dur: 3 } };
 
         // =========================
-        // 画像のプリロード
+        // キャラクターとトリガーのマスターデータ
         // =========================
-        let totalImagesToLoad = 3;
-        let imagesLoaded = 0;
-
-        function checkGameReady() {
-            imagesLoaded++;
-            if (imagesLoaded >= totalImagesToLoad) {
-                game.state = 'PLAYING';
-                loadingModal.style.display = 'none';
-                loop(); 
+        const CHARACTERS = {
+            yuma: {
+                name: "空閑 遊真",
+                image: "kuga.png",
+                hp: 120,
+                speed: 4.0,
+                expMult: 1.0,
+                allowed: ["scorpion", "grasshopper", "shield", "none"],
+                desc: "機動力と近接戦闘に特化した近界民。<br><span>専用：グラスホッパー、マンティス</span>",
+                default: { mr: "scorpion", sr: "none", ml: "grasshopper", sl: "shield" }
+            },
+            osamu: {
+                name: "三雲 修",
+                image: "osamu.png",
+                hp: 80,
+                speed: 3.0,
+                expMult: 1.5,
+                allowed: ["asteroid", "raygust", "shield", "none"],
+                desc: "トリオン量は少ないが、知略と成長で補う隊長。<br><span>特徴：経験値1.5倍 / 専用：レイガスト</span>",
+                default: { mr: "asteroid", sr: "none", ml: "raygust", sl: "shield" }
             }
-        }
-
-        // プレイヤー画像の読み込み
-        const playerImage = new Image();
-        playerImage.src = 'kuga.png';
-
-        playerImage.onload = () => {
-            player.imageLoaded = true;
-            let aspect = playerImage.width / playerImage.height;
-            player.height = 48;
-            player.width = 48 * aspect;
-            checkGameReady();
         };
 
-        playerImage.onerror = () => {
-            console.error("kuga.pngが見つかりません。デフォルトの緑四角で代用します。");
-            player.width = 48;
-            player.height = 48;
-            player.imageLoaded = false;
-            checkGameReady();
+        const TRIGGER_NAMES = {
+            scorpion: "Scorpion",
+            kogetsu: "Kogetsu",
+            asteroid: "Asteroid",
+            shield: "Shield",
+            grasshopper: "Grasshopper",
+            raygust: "Raygust",
+            none: "None"
         };
 
-        // 敵画像の読み込み
-        const enemyImage = new Image();
-        enemyImage.src = 'bumster.png';
-        let enemyImageLoaded = false;
+        // =========================
+        // UI更新関数 (キャラクター変更時)
+        // =========================
+        function onCharChange() {
+            const charKey = document.getElementById('sel-char').value;
+            const charData = CHARACTERS[charKey];
 
-        enemyImage.onload = () => {
-            enemyImageLoaded = true;
-            checkGameReady();
-        };
+            // 画像の切り替え
+            const previewImg = document.getElementById('char-preview');
+            if (previewImg) previewImg.src = charData.image;
 
-        enemyImage.onerror = () => {
-            console.error("bumster.pngが見つかりません。デフォルトの赤四角で代用します。");
-            enemyImageLoaded = false;
-            checkGameReady();
-        };
-
-        const rabitoImage = new Image();
-        rabitoImage.src = 'rabito.png';
-        let rabitoImageLoaded = false;
-        rabitoImage.onload = () => {
-            rabitoImageLoaded = true;
-            checkGameReady();
-        };
-        rabitoImage.onerror = () => {
-            console.error("rabito.pngが見つかりません。デフォルトの紫四角で代用します。");
-            rabitoImageLoaded = false;
-            checkGameReady();
-        };
-
-        // ユーティリティ計算
-        function getDistance(x1, y1, x2, y2) {
-            return Math.hypot(x2 - x1, y2 - y1);
-        }
-
-        function checkCollisionRect(x1, y1, w1, h1, x2, y2, w2, h2) {
-            return Math.abs(x1 - x2) < (w1 + w2) / 2 && Math.abs(y1 - y2) < (h1 + h2) / 2;
-        }
-
-        function spawnEnemy() {
-            let x, y;
-            if (Math.random() < 0.5) {
-                x = Math.random() < 0.5 ? -40 : width + 40;
-                y = Math.random() * height;
-            } else {
-                x = Math.random() * width;
-                y = Math.random() < 0.5 ? -40 : height + 40;
+            // テキスト情報の更新
+            const infoText = document.getElementById('char-info-text');
+            if (infoText) {
+                infoText.innerHTML = `
+                    <div style="font-size:22px; color:#00ffff; margin-bottom:10px;">${charData.name}</div>
+                    Trion: <span>${charData.hp}</span><br>
+                    Speed: <span>${charData.speed}</span><br>
+                    ${charData.desc}
+                `;
             }
-            
-            let speedMultiplier = 1 + (game.level * 0.05);
-            let hpMultiplier = 1 + Math.floor(game.level / 3);
 
-            enemies.push({
-                x: x, 
-                y: y, 
-                size: 36, 
-                speed: (1.5 + Math.random() * 0.5) * speedMultiplier,
-                hp: 1 * hpMultiplier,
-                damage: 10
+            // プルダウンの選択肢をキャラ専用に生成
+            const slots = ['sel-mr', 'sel-sr', 'sel-ml', 'sel-sl'];
+            slots.forEach(slotId => {
+                const select = document.getElementById(slotId);
+                if (!select) return;
+
+                select.innerHTML = '';
+                charData.allowed.forEach(tKey => {
+                    const opt = document.createElement('option');
+                    opt.value = tKey;
+                    opt.textContent = TRIGGER_NAMES[tKey];
+                    select.appendChild(opt);
+                });
+                // キャラごとの初期装備をセット
+                select.value = charData.default[slotId.replace('sel-', '')];
             });
         }
 
-        function showAlert(text) {
-            const alertDiv = document.createElement('div');
-            alertDiv.innerText = text;
-            alertDiv.style.position = 'absolute';
-            alertDiv.style.top = '100px';
-            alertDiv.style.left = '50%';
-            alertDiv.style.transform = 'translate(-50%, -50%)';
-            alertDiv.style.color = '#e74c3c';
-            alertDiv.style.fontSize = '48px';
-            alertDiv.style.fontWeight = 'bold';
-            alertDiv.style.textShadow = '2px 2px 4px #000';
-            alertDiv.style.zIndex = '30';
-            document.body.appendChild(alertDiv);
-            setTimeout(() => {
-                if(document.body.contains(alertDiv)) {
-                    document.body.removeChild(alertDiv);
+        // ページ読み込み時にUIを初期化
+        window.addEventListener('load', onCharChange);
+
+
+        let enemies = [];
+        let expOrbs = [];
+        let healthPotions = [];
+        let projectiles = [];
+        let wtSlashes = [];
+        let shieldEffects = [];
+
+        const trionBar = document.getElementById('trion-bar');
+        const expBar = document.getElementById('exp-bar');
+        const levelSpan = document.getElementById('level');
+        const killsSpan = document.getElementById('kills');
+
+        let customAlerts = [];
+
+        // =========================
+        // 画像読み込み
+        // =========================
+        let totalImagesToLoad = 3;
+        let imagesLoaded = 0;
+        let hasStartedLoop = false; // ← 【追加】ゲームが始まったかどうかの切符
+
+        function checkGameReady() {
+            imagesLoaded++;
+            // 【変更】切符を持っていない（まだ始まっていない）時だけ中に入る！
+            if (imagesLoaded >= totalImagesToLoad && !hasStartedLoop) {
+                hasStartedLoop = true; // ← 切符を使用済みにする
+                game.state = 'PREPARATION';
+                document.getElementById('loading-modal').style.display = 'none';
+                document.getElementById('prep-modal').style.display = 'flex';
+                onCharChange();
+                loop();
+            }
+        }
+
+        let playerImage = new Image();
+        playerImage.onload = () => { player.imageLoaded = true; checkGameReady(); };
+        playerImage.onerror = () => { player.imageLoaded = false; checkGameReady(); };
+        playerImage.src = 'kuga.png';
+
+        let enemyImage = new Image();
+        let enemyImageLoaded = false;
+        enemyImage.onload = () => { enemyImageLoaded = true; checkGameReady(); };
+        enemyImage.onerror = () => { enemyImageLoaded = false; checkGameReady(); };
+        enemyImage.src = 'bumster.png';
+
+        let rabitoImage = new Image();
+        let rabitoImageLoaded = false;
+        rabitoImage.onload = () => { rabitoImageLoaded = true; checkGameReady(); };
+        rabitoImage.onerror = () => { rabitoImageLoaded = false; checkGameReady(); };
+        rabitoImage.src = 'rabito.png';
+
+        let bgImage = new Image();
+        bgImage.src = 'background.png';
+
+        // =========================
+        // ユーティリティ
+        // =========================
+        function getDistance(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); }
+        function checkCollisionRect(x1, y1, w1, h1, x2, y2, w2, h2) {
+            return (x1 - w1 / 2 < x2 + w2 / 2 && x1 + w1 / 2 > x2 - w2 / 2 && y1 - h1 / 2 < y2 + h2 / 2 && y1 + h1 / 2 > y2 - h2 / 2);
+        }
+        function showAlert(msg) {
+            customAlerts.push({ text: msg, timer: 120 });
+        }
+
+        function updateTriggerUI() {
+            ['mr', 'sr', 'ml', 'sl'].forEach(s => {
+                let t = player.triggers[s];
+                let text = 'NONE';
+                let op = 1.0;
+                if (t) {
+                    text = t.type.toUpperCase();
+                    if (t.type === 'shield') {
+                        let dur = triggerState[s].dur;
+                        let timer = triggerState[s].timer;
+                        let cd = T_INFO.shield.cooldown;
+                        let maxD = T_INFO.shield.maxDur + (t.options.includes('shield_up') ? 2 : 0);
+                        if (dur > 0) {
+                            text = `SHIELD (${dur}/${maxD})`;
+                        } else {
+                            text = `RELOAD (${Math.ceil((cd - timer) / 60)}s)`;
+                            op = 0.5;
+                        }
+                    }
                 }
-            }, 3000);
+                document.getElementById('trig-' + s).innerText = text;
+                document.getElementById('slot-' + s).style.opacity = op;
+            });
+        }
+
+        // =========================
+        // 出撃処理 (BOOST ON)
+        // =========================
+        function startBoost() {
+            const charKey = document.getElementById('sel-char').value;
+            const charData = CHARACTERS[charKey];
+
+            // プレイヤーのステータスにキャラ性能を反映
+            player.maxHp = charData.hp;
+            player.hp = charData.hp;
+            player.speed = charData.speed;
+            player.expMultiplier = charData.expMult;
+
+            // 出撃時の画像を切り替え
+            playerImage.src = charData.image;
+
+            let getT = (v) => v === 'none' ? null : { type: v, options: [] };
+            player.triggers.mr = getT(document.getElementById('sel-mr').value);
+            player.triggers.sr = getT(document.getElementById('sel-sr').value);
+            player.triggers.ml = getT(document.getElementById('sel-ml').value);
+            player.triggers.sl = getT(document.getElementById('sel-sl').value);
+
+            // シールドなどをいきなり使えるよう開幕でタイマー最大にする
+            ['mr', 'sr', 'ml', 'sl'].forEach(s => {
+                triggerState[s] = { timer: 900, dur: 3 };
+            });
+
+            document.getElementById('prep-modal').style.display = 'none';
+            updateTriggerUI();
+            game.state = 'PLAYING';
+        }
+
+        // =========================
+        // 敵のスポーン
+        // =========================
+        function spawnEnemy() {
+            let angle = Math.random() * Math.PI * 2;
+            let r = Math.max(width, height) / 1.5;
+            let hpMultiplier = 1 + Math.floor(game.level / 3);
+            enemies.push({
+                x: player.x + Math.cos(angle) * r,
+                y: player.y + Math.sin(angle) * r,
+                size: 40,
+                speed: 1.5 + Math.random() * 0.5,
+                hp: 2 * hpMultiplier,
+                damage: 10,
+                isMidBoss: false,
+                isFinalBoss: false
+            });
         }
 
         function spawnMidBoss() {
             let hpMultiplier = 1 + Math.floor(game.level / 3);
-            let normalHp = 1 * hpMultiplier;
             enemies.push({
-                x: width / 2, 
-                y: -100, 
-                size: 80, 
-                speed: 1.0,
-                hp: normalHp * 9,
-                damage: 20,
-                isMidBoss: true
+                x: width / 2, y: -100,
+                size: 80, speed: 1.0,
+                hp: hpMultiplier * 9,
+                damage: 20, isMidBoss: true, isFinalBoss: false
             });
-            showAlert('WARNING: MID-BOSS APPROACHING!');
+            showAlert('門（ゲート）開口！付近に中型トリオン兵を検知！');
         }
 
         function spawnFinalBoss() {
             let hpMultiplier = 1 + Math.floor(game.level / 3);
-            let normalHp = 1 * hpMultiplier;
-            let midBossHp = normalHp * 3;
-            let finalBossHp = (midBossHp * 5) * 20;
+            let finalBossHp = (hpMultiplier * 3 * 5) * 20;
             enemies.push({
-                x: width / 2, 
-                y: -100, 
-                size: 120, 
-                speed: 0.8,
+                x: width / 2, y: -100,
+                size: 120, speed: 0.8,
                 hp: finalBossHp,
-                damage: 40,
-                isFinalBoss: true
+                damage: 40, isMidBoss: false, isFinalBoss: true
             });
-            showAlert('DANGER: FINAL BOSS APPROACHING!');
+            showAlert('緊急事態！付近に特級、または新型近界民（ネイバー）の反応！');
         }
 
         function triggerGameClear() {
             game.state = 'GAMECLEAR';
-            
-            const gameClearModal = document.createElement('div');
-            gameClearModal.style.position = 'absolute';
-            gameClearModal.style.top = '0';
-            gameClearModal.style.left = '0';
-            gameClearModal.style.width = '100vw';
-            gameClearModal.style.height = '100vh';
-            gameClearModal.style.background = 'rgba(0, 0, 0, 0.7)';
-            gameClearModal.style.display = 'flex';
-            gameClearModal.style.flexDirection = 'column';
-            gameClearModal.style.justifyContent = 'center';
-            gameClearModal.style.alignItems = 'center';
-            gameClearModal.style.zIndex = '20';
-            
-            gameClearModal.innerHTML = `
+            let clearModal = document.createElement('div');
+            clearModal.style.position = 'absolute';
+            clearModal.style.top = '0'; clearModal.style.left = '0';
+            clearModal.style.width = '100%'; clearModal.style.height = '100%';
+            clearModal.style.background = 'rgba(0,0,0,0.9)';
+            clearModal.style.display = 'flex';
+            clearModal.style.flexDirection = 'column';
+            clearModal.style.justifyContent = 'center';
+            clearModal.style.alignItems = 'center';
+            clearModal.style.zIndex = '200';
+            clearModal.innerHTML = `
                 <h1 style="color: #f1c40f; font-size:48px; text-shadow: 2px 2px 4px #000; margin-bottom: 30px;">GAME CLEAR!</h1>
                 <div style="font-size: 24px; margin-bottom: 30px; color:#fff;">
                     到達レベル: <span style="font-weight:bold; color:#f1c40f;">${game.level}</span><br>
                     討伐数: <span style="font-weight:bold; color:#f1c40f;">${game.kills}</span>
                 </div>
-                <button onclick="location.reload()" style="padding: 15px 40px; font-size: 24px; cursor: pointer; border: none; border-radius: 10px; background: #3498db; color: white; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.5);">もう一度プレイ</button>
+                <button onclick="location.reload()" style="padding: 15px 40px; font-size: 24px; cursor: pointer; border: none; border-radius: 10px; background: #3498db; color: white; display: block;">もう一度プレイ</button>
             `;
-            document.body.appendChild(gameClearModal);
+            document.body.appendChild(clearModal);
         }
 
-        function fireProjectile() {
+        // =========================
+        // トリガーシステム発動
+        // =========================
+        function dealDamage(e, dmg) {
+            e.hp -= dmg;
+            if (e.hp <= 0) {
+                if (e.isFinalBoss) {
+                    game.finalBossKills++;
+                    if (game.finalBossKills >= 2) triggerGameClear();
+                }
+                let xp = 1; let r = 4;
+                if (e.isMidBoss) { xp = 3; r = 6; }
+                else if (e.isFinalBoss) { xp = 8; r = 10; }
+
+                expOrbs.push({ x: e.x, y: e.y, radius: r, value: xp });
+                if (Math.random() < 0.10) healthPotions.push({ x: e.x, y: e.y, radius: 10 });
+
+                let idx = enemies.indexOf(e);
+                if (idx !== -1) enemies.splice(idx, 1);
+                game.kills++;
+            }
+        }
+
+        function fireTrigger(slot, t) {
             if (enemies.length === 0) return;
+            let info = T_INFO[t.type];
             let closest = null;
-            let md = Infinity;
+            let minDist = Infinity;
             for (let e of enemies) {
                 let d = getDistance(player.x, player.y, e.x, e.y);
-                if (d < md) { md = d; closest = e; }
+                if (d < minDist) { minDist = d; closest = e; }
             }
-            if (closest) {
-                let angle = Math.atan2(closest.y - player.y, closest.x - player.x);
-                projectiles.push({
-                    x: player.x,
-                    y: player.y,
-                    vx: Math.cos(angle) * player.projectileSpeed,
-                    vy: Math.sin(angle) * player.projectileSpeed,
-                    dist: 0,
-                    size: player.projectileSize,
-                    damage: player.damage * player.projectileDamageMult
-                });
-            }
-        }
+            if (!closest) return;
 
-        function fireSlash() {
-            if (enemies.length === 0) return;
-            
-            let closestEnemy = null;
-            let minDistance = Infinity;
-            
-            for (let e of enemies) {
-                let dist = getDistance(player.x, player.y, e.x, e.y);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closestEnemy = e;
-                }
+            if (t.type === 'grasshopper') {
+                let jumpDist = 180;
+                if (t.options.includes('gh_dist')) jumpDist += 120;
+                player.x += (player.lastDx || 1) * jumpDist;
+                player.y += (player.lastDy || 0) * jumpDist;
+                wtSlashes.push({
+                    type: 'grasshopper', color: '#2ecc71',
+                    targetAngle: 0, angle: Math.PI * 2,
+                    radius: player.width, duration: 15, maxDuration: 15
+                });
+                return;
             }
-            
-            if (closestEnemy) {
-                let targetAngle = Math.atan2(closestEnemy.y - player.y, closestEnemy.x - player.x);
-                
-                slashes.push({
-                    targetAngle: targetAngle,
-                    angle: player.attackAngle,
-                    radius: player.attackRange,
-                    duration: 15,
-                    maxDuration: 15
+            if (t.type === 'scorpion' || t.type === 'kogetsu' || t.type === 'raygust') {
+                let r = info.range;
+                let d = info.damage;
+                if (t.type === 'scorpion') {
+                    if (t.options.includes('range_up')) r += 15;
+                    if (t.options.includes('mantis')) r *= 2.0;
+                }
+                if (t.type === 'kogetsu' || t.type === 'raygust') {
+                    if (t.options.includes('dmg_up')) d += 2;
+                    if (t.options.includes('range_up')) r += 20;
+                    if (t.options.includes('senku')) { r *= 2.5; d *= 2.5; }
+                }
+
+                let targetAngle = Math.atan2(closest.y - player.y, closest.x - player.x);
+                let atkAngle = info.angle;
+
+                wtSlashes.push({
+                    type: t.type, color: info.color,
+                    targetAngle: targetAngle, angle: atkAngle,
+                    radius: r, duration: (t.type === 'scorpion') ? 6 : 14,
+                    maxDuration: (t.type === 'scorpion') ? 6 : 14
                 });
 
                 for (let i = enemies.length - 1; i >= 0; i--) {
                     let e = enemies[i];
-                    let distToEnemy = getDistance(player.x, player.y, e.x, e.y);
-                    
-                    if (distToEnemy <= player.attackRange + e.size / 2) {
-                        let angleToEnemy = Math.atan2(e.y - player.y, e.x - player.x);
-                        let angleDiff = Math.abs(angleToEnemy - targetAngle);
-                        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-                        angleDiff = Math.abs(angleDiff);
-
-                        if (angleDiff <= player.attackAngle / 2 || distToEnemy < player.width) {
-                            e.hp -= player.damage;
-                            
-                            if (e.hp <= 0) {
-                                if (e.isFinalBoss) {
-                                    game.finalBossKills++;
-                                    if(game.finalBossKills >= 2) triggerGameClear();
-                                }
-                                let xp = 1; let r = 4;
-                                if(e.isMidBoss){ xp = 3; r = 6; }
-                                else if(e.isFinalBoss){ xp = 8; r = 8; }
-                                expOrbs.push({ x: e.x, y: e.y, radius: r, value: xp });
-                                if (Math.random() < 0.10) {
-                                    healthPotions.push({ x: e.x, y: e.y, radius: 10 });
-                                }
-                                enemies.splice(i, 1);
-                                game.kills++;
-                            }
+                    let dist = getDistance(player.x, player.y, e.x, e.y);
+                    if (dist <= r + e.size / 2) {
+                        let eAng = Math.atan2(e.y - player.y, e.x - player.x);
+                        let diff = Math.abs(eAng - targetAngle);
+                        while (diff > Math.PI) diff -= 2 * Math.PI;
+                        if (Math.abs(diff) <= atkAngle / 2 || dist < player.width) {
+                            dealDamage(e, d);
                         }
                     }
                 }
+            } else if (t.type === 'asteroid') {
+                let spd = info.speed;
+                if (t.options.includes('spd_up')) spd += 2;
+                let angle = Math.atan2(closest.y - player.y, closest.x - player.x);
+                projectiles.push({
+                    x: player.x, y: player.y,
+                    vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd,
+                    baseSpd: spd, dist: 0, size: 8, damage: info.damage,
+                    target: t.options.includes('hound') ? closest : null
+                });
             }
         }
 
+        // =========================
+        // ループ処理 update & draw
+        // =========================
         function update() {
+            if (game.state === 'BAILOUT') {
+                game.bailoutVelocity -= 2;
+                player.y += game.bailoutVelocity;
+                if (player.y < -150) {
+                    game.state = 'GAMEOVER';
+                    document.getElementById('final-level').innerText = game.level;
+                    document.getElementById('final-kills').innerText = game.kills;
+                    document.getElementById('game-over-modal').style.display = 'flex';
+                }
+                return;
+            }
             if (game.state !== 'PLAYING') return;
             game.frameCount++;
 
@@ -651,6 +915,9 @@
             if (dx !== 0 && dy !== 0) {
                 let len = Math.hypot(dx, dy);
                 dx /= len; dy /= len;
+                player.lastDx = dx; player.lastDy = dy;
+            } else if (player.lastDx === undefined) {
+                player.lastDx = 1; player.lastDy = 0;
             }
 
             if (joystick.active) {
@@ -660,55 +927,78 @@
 
             player.x += dx * player.speed;
             player.y += dy * player.speed;
-            
             player.x = Math.max(player.width / 2, Math.min(width - player.width / 2, player.x));
             player.y = Math.max(player.height / 2, Math.min(height - player.height / 2, player.y));
 
             if (player.invincibleTimer > 0) player.invincibleTimer--;
 
-            player.attackTimer++;
-            if (player.attackTimer >= player.attackCooldown) {
-                fireSlash();
-                player.attackTimer = 0;
-            }
+            // トリガー発動制御
+            ['mr', 'sr', 'ml', 'sl'].forEach(slot => {
+                let t = player.triggers[slot];
+                if (!t) return;
 
-            for (let i = slashes.length - 1; i >= 0; i--) {
-                slashes[i].duration--;
-                if (slashes[i].duration <= 0) {
-                    slashes.splice(i, 1);
+                let cd = T_INFO[t.type].cooldown;
+                if (t.type === 'scorpion' && t.options.includes('cd_down')) cd *= 0.7;
+                if (t.type === 'asteroid' && t.options.includes('cd_down')) cd *= 0.6;
+
+                if (t.type === 'shield') {
+                    if (triggerState[slot].dur <= 0) {
+                        if (triggerState[slot].timer < cd) {
+                            triggerState[slot].timer++;
+                        } else {
+                            let maxD = T_INFO[t.type].maxDur + (t.options.includes('shield_up') ? 2 : 0);
+                            triggerState[slot].dur = maxD;
+                        }
+                    }
+                    return;
                 }
+
+                triggerState[slot].timer++;
+                if (triggerState[slot].timer >= cd) {
+                    triggerState[slot].timer = 0;
+                    fireTrigger(slot, t);
+                }
+            });
+
+            // エフェクト時間減少
+            for (let i = wtSlashes.length - 1; i >= 0; i--) {
+                wtSlashes[i].duration--;
+                if (wtSlashes[i].duration <= 0) wtSlashes.splice(i, 1);
+            }
+            for (let i = shieldEffects.length - 1; i >= 0; i--) {
+                shieldEffects[i].duration--;
+                if (shieldEffects[i].duration <= 0) shieldEffects.splice(i, 1);
             }
 
+            // スポーン処理
             let hasFinalBoss = enemies.some(e => e.isFinalBoss);
-
             if (!hasFinalBoss) {
                 if (game.kills >= game.nextMidBossKill) {
                     spawnMidBoss();
                     game.nextMidBossKill += 30;
                 }
-
                 let currentSpawnRate = Math.max(10, game.baseSpawnRate - game.level * 3);
                 if (game.frameCount % currentSpawnRate === 0) {
                     spawnEnemy();
                     if (game.level >= 5) spawnEnemy();
                 }
             }
-
             if (game.kills >= game.nextFinalBossKill && !hasFinalBoss) {
                 spawnFinalBoss();
                 game.nextFinalBossKill += 100;
             }
 
-            if (player.hasProjectile) {
-                player.projectileTimer++;
-                if (player.projectileTimer >= player.projectileCooldown) {
-                    player.projectileTimer = 0;
-                    fireProjectile();
-                }
-            }
-            
+            // プロジェクタイル更新
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 let p = projectiles[i];
+                // Hound 追尾処理
+                if (p.target && enemies.includes(p.target)) {
+                    let angle = Math.atan2(p.target.y - p.y, p.target.x - p.x);
+                    let houndSpeed = p.baseSpd * 1.2;
+                    p.vx = Math.cos(angle) * houndSpeed;
+                    p.vy = Math.sin(angle) * houndSpeed;
+                }
+
                 p.x += p.vx;
                 p.y += p.vy;
                 p.dist += Math.hypot(p.vx, p.vy);
@@ -717,60 +1007,17 @@
                 for (let j = enemies.length - 1; j >= 0; j--) {
                     let e = enemies[j];
                     if (getDistance(p.x, p.y, e.x, e.y) < p.size + e.size / 2) {
-                        e.hp -= p.damage;
+                        dealDamage(e, p.damage);
                         hit = true;
-                        
-                        if (e.hp <= 0) {
-                            if (e.isFinalBoss) {
-                                game.finalBossKills++;
-                                if(game.finalBossKills >= 2) triggerGameClear();
-                            }
-                            let xp = 1; let r = 4;
-                            if(e.isMidBoss){ xp = 3; r = 6; }
-                            else if(e.isFinalBoss){ xp = 8; r = 8; }
-                            expOrbs.push({ x: e.x, y: e.y, radius: r, value: xp });
-                            if (Math.random() < 0.10) healthPotions.push({ x: e.x, y: e.y, radius: 10 });
-                            enemies.splice(j, 1);
-                            game.kills++;
-                        }
                         break;
                     }
                 }
-                if (hit || p.dist > player.projectileRange) {
+                if (hit || p.dist > T_INFO.asteroid.range + (p.target ? 200 : 0)) {
                     projectiles.splice(i, 1);
                 }
             }
 
-            if (player.hasShield) {
-                player.shieldAngle += player.shieldSpeed;
-                for (let i = 0; i < player.shieldCount; i++) {
-                    let angle = player.shieldAngle + (Math.PI * 2 / player.shieldCount) * i;
-                    let sx = player.x + Math.cos(angle) * player.shieldRadius;
-                    let sy = player.y + Math.sin(angle) * player.shieldRadius;
-
-                    for (let j = enemies.length - 1; j >= 0; j--) {
-                        let e = enemies[j];
-                        if (getDistance(sx, sy, e.x, e.y) < player.shieldSize + e.size / 2) {
-                            e.hp -= player.shieldDamage;
-                            
-                            if (e.hp <= 0) {
-                                if (e.isFinalBoss) {
-                                    game.finalBossKills++;
-                                    if(game.finalBossKills >= 2) triggerGameClear();
-                                }
-                                let xp = 1; let r = 4;
-                                if(e.isMidBoss){ xp = 3; r = 6; }
-                                else if(e.isFinalBoss){ xp = 8; r = 8; }
-                                expOrbs.push({ x: e.x, y: e.y, radius: r, value: xp });
-                                if (Math.random() < 0.10) healthPotions.push({ x: e.x, y: e.y, radius: 10 });
-                                enemies.splice(j, 1);
-                                game.kills++;
-                            }
-                        }
-                    }
-                }
-            }
-
+            // 敵の移動と当たり判定
             for (let i = enemies.length - 1; i >= 0; i--) {
                 let e = enemies[i];
                 let angle = Math.atan2(player.y - e.y, player.x - e.x);
@@ -778,31 +1025,59 @@
                 e.y += Math.sin(angle) * e.speed;
 
                 if (player.invincibleTimer === 0 && checkCollisionRect(player.x, player.y, player.width, player.height, e.x, e.y, e.size, e.size)) {
-                    player.hp -= e.damage;
-                    player.invincibleTimer = 30; 
-                    
-                    if (player.hp <= 0) {
-                        player.hp = 0;
-                        triggerGameOver();
-                        return; 
+
+                    let hasShield = false;
+                    let shieldDur = 20;
+                    for (let slot of ['mr', 'sr', 'ml', 'sl']) {
+                        let trig = player.triggers[slot];
+                        if (trig && trig.type === 'shield' && triggerState[slot].dur > 0) {
+                            hasShield = true;
+                            triggerState[slot].dur--;
+                            if (triggerState[slot].dur <= 0) {
+                                triggerState[slot].timer = 0; // 空でリロード開始
+                            }
+                            if (trig.options.includes('shield_up')) shieldDur = 35;
+                            break;
+                        }
+                    }
+
+                    if (hasShield) {
+                        player.invincibleTimer = shieldDur;
+                        shieldEffects.push({
+                            x: player.x,
+                            y: player.y,
+                            angle: Math.atan2(e.y - player.y, e.x - player.x),
+                            duration: shieldDur
+                        });
+                    } else {
+                        player.hp -= e.damage;
+                        player.invincibleTimer = 30;
+
+                        if (player.hp <= 0) {
+                            player.hp = 0;
+                            trionBar.style.width = '0%';
+                            game.state = 'BAILOUT';
+                            game.bailoutVelocity = 0;
+                            return;
+                        }
                     }
                 }
             }
 
-            let pickupRadius = Math.max(player.width, player.height) + 30; 
+            // アイテム回収
+            let pickupRadius = Math.max(player.width, player.height) + 30;
             for (let i = expOrbs.length - 1; i >= 0; i--) {
                 let o = expOrbs[i];
                 let dist = getDistance(player.x, player.y, o.x, o.y);
-                
                 if (dist < pickupRadius) {
-                    if (dist > Math.max(player.width, player.height) / 2) {
+                    if (dist > player.width / 2) {
                         let angle = Math.atan2(player.y - o.y, player.x - o.x);
                         o.x += Math.cos(angle) * 8;
                         o.y += Math.sin(angle) * 8;
                     } else {
-                        game.exp += o.value;
+                        game.exp += o.value * (player.expMultiplier || 1.0);
                         expOrbs.splice(i, 1);
-                        checkLevelUp();
+                        setTimeout(checkLevelUp, 0);
                     }
                 }
             }
@@ -820,93 +1095,115 @@
         }
 
         function updateUI() {
-            hpBar.style.width = Math.max(0, (player.hp / player.maxHp) * 100) + '%';
+            trionBar.style.width = Math.max(0, (player.hp / player.maxHp) * 100) + '%';
             expBar.style.width = Math.min(100, (game.exp / game.expToNext) * 100) + '%';
             levelSpan.innerText = game.level;
             killsSpan.innerText = game.kills;
+            updateTriggerUI();
         }
 
+        // =========================
+        // アップグレードシステム
+        // =========================
         function checkLevelUp() {
             if (game.exp >= game.expToNext) {
                 game.exp -= game.expToNext;
                 game.level++;
                 game.expToNext = Math.floor(game.expToNext * 1.5) + 5;
-                triggerLevelUp();
+
+                game.state = 'PAUSED';
+                let upgradeCardsContainer = document.getElementById('upgrade-cards');
+                upgradeCardsContainer.innerHTML = '';
+
+                let allOptions = getUpgradeOptions();
+                let shuffled = [...allOptions].sort(() => 0.5 - Math.random());
+                let choices = shuffled.slice(0, 3);
+
+                choices.forEach(upg => {
+                    let card = document.createElement('div');
+                    card.className = 'upgrade-card';
+                    card.innerHTML = `<h3>${upg.name}</h3><p>${upg.desc}</p>`;
+                    card.onclick = () => {
+                        upg.apply();
+                        updateTriggerUI();
+                        updateUI();
+                        game.state = 'PLAYING';
+                        document.getElementById('level-up-modal').style.display = 'none';
+                    };
+                    upgradeCardsContainer.appendChild(card);
+                });
+
+                document.getElementById('level-up-modal').style.display = 'flex';
             }
         }
 
+        function addOption(type, option) {
+            ['mr', 'sr', 'ml', 'sl'].forEach(s => {
+                let t = player.triggers[s];
+                if (t && t.type === type && !t.options.includes(option)) t.options.push(option);
+            });
+        }
+
         function getUpgradeOptions() {
-            let options = [
-                { name: "近接攻撃速度UP", desc: "斬撃の間隔が短縮されます", apply: () => player.attackCooldown = Math.max(10, player.attackCooldown * 0.85) },
-                { name: "近接斬撃距離UP", desc: "攻撃の届く範囲が長くなります", apply: () => player.attackRange += 20 },
-                { name: "近接斬撃範囲拡大", desc: "斬撃の角度が広がります", apply: () => player.attackAngle = Math.min(Math.PI * 2, player.attackAngle + Math.PI / 4) },
-                { name: "威力UP", desc: "斬撃で敵に与えるダメージが倍増します", apply: () => player.damage += 1 },
-                { name: "移動速度UP", desc: "プレイヤーの移動速度が上昇します", apply: () => player.speed += 0.5 },
-                { name: "最大HP増加", desc: "最大HP+20、同時に少し回復します", apply: () => { player.maxHp += 20; player.hp = Math.min(player.maxHp, player.hp + 20); } }
-            ];
+            let options = [];
+            options.push({ name: "トリオン受容体強化", desc: "最大Trion+20 & 即時回復", apply: () => { player.maxHp += 20; player.hp = Math.min(player.maxHp, player.hp + 20); } });
+            options.push({ name: "機動力UP", desc: "プレイヤーの移動速度が上昇します", apply: () => player.speed += 0.5 });
 
-            if (!player.hasProjectile) {
-                options.push({ name: "遠距離攻撃（緑）取得", desc: "近くの敵に自動で弾を撃ちます", apply: () => player.hasProjectile = true });
-            } else {
-                options.push({ name: "弾の飛距離UP", desc: "遠距離攻撃が遠くまで届きます", apply: () => player.projectileRange += 100 });
-                options.push({ name: "弾のサイズUP", desc: "遠距離攻撃の弾が大きくなります", apply: () => player.projectileSize += 3 });
-                options.push({ name: "弾速UP", desc: "遠距離攻撃の弾スピードが上がります", apply: () => player.projectileSpeed += 2 });
-                options.push({ name: "弾の威力UP", desc: "遠距離攻撃の与えるダメージが増加します", apply: () => player.projectileDamageMult += 0.5 });
+            let hasT = (tType) => ['mr', 'sr', 'ml', 'sl'].some(s => player.triggers[s]?.type === tType);
+            let hasO = (tType, opt) => ['mr', 'sr', 'ml', 'sl'].some(s => player.triggers[s]?.type === tType && player.triggers[s].options.includes(opt));
+
+            if (hasT('scorpion')) {
+                options.push({ name: "軽量化", desc: "Scorpionの攻撃間隔を短縮します", apply: () => addOption('scorpion', 'cd_down') });
+                options.push({ name: "ブレード伸長", desc: "Scorpionの攻撃範囲+15", apply: () => addOption('scorpion', 'range_up') });
+                if (!hasO('scorpion', 'mantis')) options.push({ name: "マンティス", desc: "【専用】Scorpionの攻撃範囲が2倍になる", apply: () => addOption('scorpion', 'mantis') });
             }
-
-            if (!player.hasShield) {
-                options.push({ name: "回転シールド（盾）取得", desc: "自身の周りを回るシールドを展開します", apply: () => { player.hasShield = true; player.shieldCount = 2; } });
-            } else {
-                options.push({ name: "シールド回転速度UP", desc: "シールドの回るスピードが速くなります", apply: () => player.shieldSpeed += 0.02 });
-                options.push({ name: "シールド回転半径UP", desc: "シールドがより遠くを回るようになります", apply: () => player.shieldRadius += 20 });
-                options.push({ name: "シールド枚数+1", desc: "シールドの枚数が増加します", apply: () => player.shieldCount += 1 });
+            if (hasT('kogetsu')) {
+                options.push({ name: "切れ味強化", desc: "Kogetsuのダメージ+2", apply: () => addOption('kogetsu', 'dmg_up') });
+                options.push({ name: "刀身延長", desc: "Kogetsuの攻撃範囲+20", apply: () => addOption('kogetsu', 'range_up') });
+                if (!hasO('kogetsu', 'senku')) options.push({ name: "旋空", desc: "【専用】Kogetsuが超広範囲の斬撃になる", apply: () => addOption('kogetsu', 'senku') });
+            }
+            if (hasT('asteroid')) {
+                options.push({ name: "トリオン分割増量", desc: "Asteroidの発射間隔を短縮します", apply: () => addOption('asteroid', 'cd_down') });
+                options.push({ name: "弾速UP", desc: "Asteroidのプロジェクタイル速度+2", apply: () => addOption('asteroid', 'spd_up') });
+                if (!hasO('asteroid', 'hound')) options.push({ name: "ハウンド", desc: "【専用】Asteroidの弾が敵を追尾する", apply: () => addOption('asteroid', 'hound') });
+            }
+            if (hasT('shield')) {
+                options.push({ name: "耐久力UP", desc: "Shieldの展開範囲と効果時間が延びる", apply: () => addOption('shield', 'shield_up') });
+            }
+            if (hasT('grasshopper')) {
+                options.push({ name: "連撃用ピンボール", desc: "Grasshopperの発動間隔短縮", apply: () => addOption('grasshopper', 'cd_down') });
+                if (!hasO('grasshopper', 'gh_dist')) options.push({ name: "推力UP", desc: "Grasshopperのダッシュ距離増加", apply: () => addOption('grasshopper', 'gh_dist') });
+            }
+            if (hasT('raygust')) {
+                options.push({ name: "ブレード展開", desc: "Raygustの攻撃範囲拡大", apply: () => addOption('raygust', 'range_up') });
+                options.push({ name: "重装甲化", desc: "Raygustのダメージ+2", apply: () => addOption('raygust', 'dmg_up') });
             }
 
             return options;
         }
 
-        function triggerLevelUp() {
-            game.state = 'PAUSED';
-            upgradeCards.innerHTML = '';
-            
-            let allOptions = getUpgradeOptions();
-            let shuffled = [...allOptions].sort(() => 0.5 - Math.random());
-            let choices = shuffled.slice(0, 3);
-            
-            choices.forEach(upg => {
-                let card = document.createElement('div');
-                card.className = 'upgrade-card';
-                card.innerHTML = `<h3>${upg.name}</h3><p>${upg.desc}</p>`;
-                card.onclick = () => {
-                    upg.apply();
-                    updateUI();
-                    game.state = 'PLAYING';
-                    levelUpModal.style.display = 'none';
-                };
-                upgradeCards.appendChild(card);
-            });
-            
-            levelUpModal.style.display = 'flex';
-        }
-
-        function triggerGameOver() {
-            game.state = 'GAMEOVER';
-            updateUI();
-            document.getElementById('final-level').innerText = game.level;
-            document.getElementById('final-kills').innerText = game.kills;
-            gameOverModal.style.display = 'flex';
-        }
-
+        // =========================
+        // 描画
+        // =========================
         function draw() {
-            ctx.clearRect(0, 0, width, height);
+            if (bgImage.complete && bgImage.naturalWidth > 0) {
+                let ptrn = ctx.createPattern(bgImage, 'repeat');
+                ctx.fillStyle = ptrn;
+                ctx.fillRect(0, 0, width, height);
+            } else {
+                ctx.fillStyle = '#111';
+                ctx.fillRect(0, 0, width, height);
+            }
 
-            ctx.fillStyle = '#3498db';
+            // exp
+            ctx.fillStyle = '#f1c40f';
             for (let o of expOrbs) {
                 ctx.beginPath();
                 ctx.arc(o.x, o.y, o.radius, 0, Math.PI * 2);
                 ctx.fill();
             }
 
+            // potion
             for (let p of healthPotions) {
                 ctx.fillStyle = '#2ecc71';
                 ctx.beginPath();
@@ -915,131 +1212,118 @@
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 2;
                 ctx.stroke();
-                
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(p.x - 4, p.y - 1, 8, 2);
                 ctx.fillRect(p.x - 1, p.y - 4, 2, 8);
             }
 
+            // Asteroid
             for (let p of projectiles) {
-                ctx.strokeStyle = '#2ecc71';
-                ctx.lineWidth = p.size;
-                ctx.lineCap = 'round';
-                ctx.beginPath();
-                let speedSq = p.vx*p.vx + p.vy*p.vy;
-                let length = p.size * 3;
-                let nx = 0, ny = 0;
-                if(speedSq > 0) {
-                    let spd = Math.sqrt(speedSq);
-                    nx = p.vx / spd;
-                    ny = p.vy / spd;
-                }
-                ctx.moveTo(p.x, p.y);
-                ctx.lineTo(p.x - nx * length, p.y - ny * length);
-                ctx.stroke();
+                ctx.fillStyle = '#3498db';
+                ctx.fillRect(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2);
             }
 
+            // Enemies
             for (let e of enemies) {
                 if (e.isFinalBoss) {
-                    if (rabitoImageLoaded) {
-                        ctx.drawImage(rabitoImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
-                    } else {
-                        ctx.fillStyle = '#9b59b6';
-                        ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
-                    }
+                    if (rabitoImageLoaded) ctx.drawImage(rabitoImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                    else { ctx.fillStyle = '#9b59b6'; ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size); }
                 } else {
-                    if (enemyImageLoaded) {
-                        ctx.drawImage(enemyImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
-                    } else {
-                        ctx.fillStyle = '#e74c3c';
-                        ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
-                    }
+                    if (enemyImageLoaded) ctx.drawImage(enemyImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                    else { ctx.fillStyle = '#e74c3c'; ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size); }
                 }
+            }
+
+            // プレイヤー
+            if (player.invincibleTimer > 0 && Math.floor(Date.now() / 100) % 2 === 0) {
+            } else {
+                ctx.save();
+                ctx.translate(player.x, player.y);
+                if (player.imageLoaded) {
+                    ctx.drawImage(playerImage, -player.width / 2, -player.height / 2, player.width, player.height);
+                } else {
+                    ctx.fillStyle = '#3498db';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, player.width / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
             }
 
             ctx.save();
             ctx.translate(player.x, player.y);
 
-            if (player.hasShield) {
-                for (let i = 0; i < player.shieldCount; i++) {
-                    let angle = player.shieldAngle + (Math.PI * 2 / player.shieldCount) * i;
-                    let sx = Math.cos(angle) * player.shieldRadius;
-                    let sy = Math.sin(angle) * player.shieldRadius;
-                    
-                    ctx.save();
-                    ctx.translate(sx, sy);
-                    ctx.rotate(angle);
-                    
-                    ctx.fillStyle = '#a8e6cf';
-                    ctx.beginPath();
-                    let s = player.shieldSize;
-                    ctx.moveTo(0, s);
-                    ctx.lineTo(s * 0.8, s * 0.5);
-                    ctx.lineTo(s * 0.8, -s * 0.5);
-                    ctx.lineTo(-s * 0.8, -s * 0.5);
-                    ctx.lineTo(-s * 0.8, s * 0.5);
-                    ctx.closePath();
-                    ctx.fill();
-                    
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    ctx.restore();
-                }
-            }
-
-            for (let s of slashes) {
-                let progress = s.duration / s.maxDuration; 
+            // Slashes
+            for (let s of wtSlashes) {
+                let progress = 1.0 - (s.duration / s.maxDuration);
+                let startAngle = s.targetAngle - s.angle / 2;
+                let currentAngle = startAngle + (s.angle * Math.pow(progress, 0.5));
 
                 ctx.save();
                 ctx.globalCompositeOperation = "lighter";
-                
-                ctx.shadowBlur = 30 * progress;
-                ctx.shadowColor = "#00ffff"; 
-
-                ctx.beginPath();
-                ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
-                ctx.lineWidth = 25 * progress;
                 ctx.lineCap = "round";
-                ctx.strokeStyle = `rgba(0, 200, 255, ${ progress })`;
+
+                let baseWidth = (s.type === 'scorpion' ? 15 : 40) * Math.sin(progress * Math.PI);
+
+                // Layer 1: Glow
+                ctx.beginPath();
+                ctx.arc(0, 0, s.radius, startAngle, currentAngle);
+                ctx.shadowBlur = s.type === 'scorpion' ? 15 : 40;
+                ctx.shadowColor = s.color;
+                ctx.lineWidth = baseWidth * 1.5;
+                ctx.strokeStyle = s.color;
                 ctx.stroke();
 
+                // Layer 2: Core Color
                 ctx.beginPath();
-                ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
-                ctx.lineWidth = 8 * progress;
-                ctx.lineCap = "round";
-                ctx.strokeStyle = `rgba(255, 255, 255, ${ progress })`;
+                ctx.arc(0, 0, s.radius, startAngle, currentAngle);
+                ctx.shadowBlur = 0;
+                ctx.lineWidth = baseWidth * 0.8;
+                let rgb = s.color === '#f1c40f' ? '241,196,15' : '52,152,219';
+                ctx.strokeStyle = `rgba(${rgb}, 0.8)`;
                 ctx.stroke();
 
+                // Layer 3: White Center
                 ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
-                ctx.fillStyle = `rgba(0, 255, 255, ${ 0.3 * progress })`;
-                ctx.fill();
+                ctx.arc(0, 0, s.radius, startAngle, currentAngle);
+                ctx.lineWidth = baseWidth * 0.3;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
 
-                ctx.restore(); 
+                ctx.restore();
             }
 
-            if (player.invincibleTimer === 0 || game.frameCount % 10 < 5) {
-                if (player.imageLoaded) {
-                    ctx.drawImage(
-                        playerImage, 
-                        -player.width / 2, 
-                        -player.height / 2, 
-                        player.width, 
-                        player.height
-                    );
-                } else {
-                    ctx.fillStyle = '#2ecc71';
-                    ctx.fillRect(-player.width / 2, -player.height / 2, player.width, player.height);
-                    
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(-player.width / 2, -player.height / 2, player.width, player.height);
-                }
+            // Shield Effects
+            for (let s of shieldEffects) {
+                let progress = s.duration / 20;
+                ctx.save();
+                ctx.globalCompositeOperation = "lighter";
+                ctx.beginPath();
+                ctx.arc(0, 0, T_INFO.shield.range, s.angle - Math.PI / 4, s.angle + Math.PI / 4);
+                ctx.lineWidth = 8;
+                ctx.lineCap = "round";
+                ctx.strokeStyle = `rgba(46, 204, 113, ${progress * 0.8})`; // green shield
+                ctx.stroke();
+
+                ctx.fillStyle = `rgba(46, 204, 113, ${progress * 0.2})`;
+                ctx.fill();
+                ctx.restore();
             }
 
             ctx.restore();
+
+            for (let i = customAlerts.length - 1; i >= 0; i--) {
+                let a = customAlerts[i];
+                ctx.fillStyle = `rgba(231, 76, 60, ${Math.min(1, a.timer / 30)})`;
+                ctx.font = 'bold 36px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(a.text, width / 2, height / 4 + (customAlerts.length - i) * 40);
+                a.timer--;
+                if (a.timer <= 0) customAlerts.splice(i, 1);
+            }
         }
 
         function loop() {
@@ -1049,4 +1333,5 @@
         }
     </script>
 </body>
+
 </html>
