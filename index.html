@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2Dサバイバーゲーム</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .bar-container {
+            width: 300px;
+            height: 24px;
+            background: #444;
+            border: 2px solid #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 8px;
+            position: relative;
+        }
+        #hp-bar {
+            background: #e74c3c;
+            width: 100%;
+            height: 100%;
+            transition: width 0.2s;
+        }
+        #exp-bar {
+            background: #3498db;
+            width: 0%;
+            height: 100%;
+            transition: width 0.2s;
+        }
+        .bar-label {
+            position: absolute;
+            top: 0;
+            left: 10px;
+            line-height: 24px;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px #000;
+        }
+        #stats {
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px #000;
+            margin-top: 10px;
+        }
+        #loading-modal, #level-up-modal, #game-over-modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+        #loading-modal {
+            display: flex;
+        }
+        h1 {
+            font-size: 48px;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px #000;
+            color: #f1c40f;
+        }
+        .card-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 800px;
+        }
+        .upgrade-card {
+            background: #333;
+            border: 3px solid #f1c40f;
+            border-radius: 15px;
+            padding: 20px;
+            width: 200px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            pointer-events: auto;
+        }
+        .upgrade-card:hover {
+            transform: translateY(-10px) scale(1.05);
+            background: #444;
+        }
+        .upgrade-card h3 {
+            margin: 0 0 15px 0;
+            color: #f1c40f;
+            font-size: 22px;
+        }
+        .upgrade-card p {
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        button.retry-btn {
+            padding: 15px 40px;
+            font-size: 24px;
+            cursor: pointer;
+            border: none;
+            border-radius: 10px;
+            background: #e74c3c;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            transition: background 0.2s;
+            pointer-events: auto;
+        }
+        button.retry-btn:hover {
+            background: #c0392b;
+        }
+        .result-text {
+            font-size: 24px;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div class="bar-container">
+            <div id="hp-bar"></div>
+            <div class="bar-label">HP</div>
+        </div>
+        <div class="bar-container" style="height: 16px;">
+            <div id="exp-bar"></div>
+            <div class="bar-label" style="line-height: 16px; font-size: 12px;">EXP</div>
+        </div>
+        <div id="stats">
+            Level: <span id="level">1</span><br>
+            Kills: <span id="kills">0</span>
+        </div>
+    </div>
+    
+    <div id="loading-modal">
+        <h1 style="color: #fff;">Now Loading...</h1>
+    </div>
+
+    <div id="level-up-modal">
+        <h1>LEVEL UP!</h1>
+        <div class="card-container" id="upgrade-cards"></div>
+    </div>
+
+    <div id="game-over-modal">
+        <h1 style="color: #e74c3c;">GAME OVER</h1>
+        <div class="result-text">
+            到達レベル: <span id="final-level" style="font-weight:bold; color:#f1c40f;"></span><br>
+            討伐数: <span id="final-kills" style="font-weight:bold; color:#f1c40f;"></span>
+        </div>
+        <button class="retry-btn" onclick="location.reload()">もう一度プレイ</button>
+    </div>
+
+    <canvas id="game"></canvas>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // キーボード入力
+        const keys = {};
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        // ゲームステート
+        let game = {
+            level: 1,
+            exp: 0,
+            expToNext: 10,
+            kills: 0,
+            state: 'LOADING',
+            frameCount: 0,
+            baseSpawnRate: 70
+        };
+
+        // プレイヤーオブジェクト
+        let player = {
+            x: width / 2, 
+            y: height / 2, 
+            width: 48, 
+            height: 48,
+            speed: 3.5,
+            hp: 100, 
+            maxHp: 100, 
+            attackCooldown: 60, // 攻撃（斬撃）間隔
+            attackTimer: 0,
+            damage: 2,
+            attackRange: 80, // 斬撃の届く距離（半径）
+            attackAngle: Math.PI * 0.5, // 初期角度（90度）
+            invincibleTimer: 0,
+            imageLoaded: false
+        };
+
+        let enemies = [];
+        let slashes = []; // 斬撃エフェクトの配列
+        let expOrbs = [];
+
+        // UI要素
+        const hpBar = document.getElementById('hp-bar');
+        const expBar = document.getElementById('exp-bar');
+        const levelSpan = document.getElementById('level');
+        const killsSpan = document.getElementById('kills');
+        const levelUpModal = document.getElementById('level-up-modal');
+        const upgradeCards = document.getElementById('upgrade-cards');
+        const gameOverModal = document.getElementById('game-over-modal');
+        const loadingModal = document.getElementById('loading-modal');
+
+        // =========================
+        // 画像のプリロード
+        // =========================
+        const playerImage = new Image();
+        playerImage.src = 'kugaplayer.png';
+
+        playerImage.onload = () => {
+            player.imageLoaded = true;
+            let aspect = playerImage.width / playerImage.height;
+            player.height = 48;
+            player.width = 48 * aspect;
+            game.state = 'PLAYING';
+            loadingModal.style.display = 'none';
+            loop(); 
+        };
+
+        playerImage.onerror = () => {
+            console.error("kugaplayer.pngが見つかりません。デフォルトの緑四角で代用します。");
+            player.width = 48;
+            player.height = 48;
+            player.imageLoaded = false;
+            game.state = 'PLAYING';
+            loadingModal.style.display = 'none';
+            loop();
+        };
+
+        // ユーティリティ計算
+        function getDistance(x1, y1, x2, y2) {
+            return Math.hypot(x2 - x1, y2 - y1);
+        }
+
+        function checkCollisionRect(x1, y1, w1, h1, x2, y2, w2, h2) {
+            return Math.abs(x1 - x2) < (w1 + w2) / 2 && Math.abs(y1 - y2) < (h1 + h2) / 2;
+        }
+
+        function spawnEnemy() {
+            let x, y;
+            if (Math.random() < 0.5) {
+                x = Math.random() < 0.5 ? -40 : width + 40;
+                y = Math.random() * height;
+            } else {
+                x = Math.random() * width;
+                y = Math.random() < 0.5 ? -40 : height + 40;
+            }
+            
+            let speedMultiplier = 1 + (game.level * 0.05);
+            let hpMultiplier = 1 + Math.floor(game.level / 3);
+
+            enemies.push({
+                x: x, 
+                y: y, 
+                size: 20,
+                speed: (1.5 + Math.random() * 0.5) * speedMultiplier,
+                hp: 1 * hpMultiplier,
+                damage: 10
+            });
+        }
+
+        // 近接斬撃の発動処理
+        function fireSlash() {
+            if (enemies.length === 0) return;
+            
+            let closestEnemy = null;
+            let minDistance = Infinity;
+            
+            for (let e of enemies) {
+                let dist = getDistance(player.x, player.y, e.x, e.y);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestEnemy = e;
+                }
+            }
+            
+            if (closestEnemy) {
+                // 最も近い敵への角度を計算
+                let targetAngle = Math.atan2(closestEnemy.y - player.y, closestEnemy.x - player.x);
+                
+                // エフェクト生成
+                slashes.push({
+                    targetAngle: targetAngle,
+                    angle: player.attackAngle,
+                    radius: player.attackRange,
+                    duration: 12,
+                    maxDuration: 12
+                });
+
+                // 発生した瞬間に当たり判定を1度だけ一括処理する
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    let e = enemies[i];
+                    let distToEnemy = getDistance(player.x, player.y, e.x, e.y);
+                    
+                    // 距離が攻撃範囲内か？（敵の半径分も少し加味）
+                    if (distToEnemy <= player.attackRange + e.size / 2) {
+                        
+                        // プレイヤーから敵への角度
+                        let angleToEnemy = Math.atan2(e.y - player.y, e.x - player.x);
+                        
+                        // 目標角度との差を計算して 0〜π の範囲に正規化
+                        let angleDiff = Math.abs(angleToEnemy - targetAngle);
+                        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                        angleDiff = Math.abs(angleDiff);
+
+                        // 敵が斬撃の扇形の中に入っている、またはプレイヤーに極めて近い場合はヒット
+                        if (angleDiff <= player.attackAngle / 2 || distToEnemy < player.width) {
+                            e.hp -= player.damage;
+                            
+                            // 倒した処理
+                            if (e.hp <= 0) {
+                                expOrbs.push({ x: e.x, y: e.y, radius: 4, value: 1 });
+                                enemies.splice(i, 1);
+                                game.kills++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function update() {
+            if (game.state !== 'PLAYING') return;
+            game.frameCount++;
+
+            // プレイヤーの移動
+            let dx = 0, dy = 0;
+            if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+            if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+            if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+            if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+
+            if (dx !== 0 && dy !== 0) {
+                let len = Math.hypot(dx, dy);
+                dx /= len; dy /= len;
+            }
+
+            player.x += dx * player.speed;
+            player.y += dy * player.speed;
+            
+            player.x = Math.max(player.width / 2, Math.min(width - player.width / 2, player.x));
+            player.y = Math.max(player.height / 2, Math.min(height - player.height / 2, player.y));
+
+            if (player.invincibleTimer > 0) player.invincibleTimer--;
+
+            // 自動斬撃の発動
+            player.attackTimer++;
+            if (player.attackTimer >= player.attackCooldown) {
+                fireSlash();
+                player.attackTimer = 0;
+            }
+
+            // 斬撃エフェクトの更新（時間経過で消える）
+            for (let i = slashes.length - 1; i >= 0; i--) {
+                slashes[i].duration--;
+                if (slashes[i].duration <= 0) {
+                    slashes.splice(i, 1);
+                }
+            }
+
+            // 敵のスポーン
+            let currentSpawnRate = Math.max(10, game.baseSpawnRate - game.level * 3);
+            if (game.frameCount % currentSpawnRate === 0) {
+                spawnEnemy();
+                if (game.level >= 5) spawnEnemy();
+            }
+
+            // 敵の追従移動・被弾判定
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                let e = enemies[i];
+                let angle = Math.atan2(player.y - e.y, player.x - e.x);
+                e.x += Math.cos(angle) * e.speed;
+                e.y += Math.sin(angle) * e.speed;
+
+                // Rectangle当たり判定
+                if (player.invincibleTimer === 0 && checkCollisionRect(player.x, player.y, player.width, player.height, e.x, e.y, e.size, e.size)) {
+                    player.hp -= e.damage;
+                    player.invincibleTimer = 30; // 被弾後の無敵時間
+                    
+                    if (player.hp <= 0) {
+                        player.hp = 0;
+                        triggerGameOver();
+                        return; 
+                    }
+                }
+            }
+
+            // 経験値オーブの回収判定
+            let pickupRadius = Math.max(player.width, player.height) + 30; 
+            for (let i = expOrbs.length - 1; i >= 0; i--) {
+                let o = expOrbs[i];
+                let dist = getDistance(player.x, player.y, o.x, o.y);
+                
+                if (dist < pickupRadius) {
+                    // 近づいたら吸い込まれる処理
+                    if (dist > Math.max(player.width, player.height) / 2) {
+                        let angle = Math.atan2(player.y - o.y, player.x - o.x);
+                        o.x += Math.cos(angle) * 8;
+                        o.y += Math.sin(angle) * 8;
+                    } else {
+                        game.exp += o.value;
+                        expOrbs.splice(i, 1);
+                        checkLevelUp();
+                    }
+                }
+            }
+
+            updateUI();
+        }
+
+        function updateUI() {
+            hpBar.style.width = Math.max(0, (player.hp / player.maxHp) * 100) + '%';
+            expBar.style.width = Math.min(100, (game.exp / game.expToNext) * 100) + '%';
+            levelSpan.innerText = game.level;
+            killsSpan.innerText = game.kills;
+        }
+
+        function checkLevelUp() {
+            if (game.exp >= game.expToNext) {
+                game.exp -= game.expToNext;
+                game.level++;
+                game.expToNext = Math.floor(game.expToNext * 1.5) + 5;
+                triggerLevelUp();
+            }
+        }
+
+        // =========================
+        // 強化ステータス一覧
+        // =========================
+        const upgradeOptions = [
+            { name: "攻撃速度アップ", desc: "斬撃の間隔が短縮されます", apply: () => player.attackCooldown = Math.max(10, player.attackCooldown * 0.85) },
+            { name: "斬撃距離アップ", desc: "攻撃の届く範囲（半径）が長くなります", apply: () => player.attackRange += 20 },
+            { name: "斬撃範囲拡大", desc: "斬撃の角度が広がり、最終的に周囲全方位化します", apply: () => player.attackAngle = Math.min(Math.PI * 2, player.attackAngle + Math.PI / 4) },
+            { name: "威カアップ", desc: "斬撃で敵に与えるダメージが倍増します", apply: () => player.damage += 1 },
+            { name: "移動速度アップ", desc: "プレイヤーの移動速度が上昇します", apply: () => player.speed += 0.5 },
+            { name: "最大HPアップ", desc: "最大HP+20、同時に少し回復します", apply: () => { player.maxHp += 20; player.hp = Math.min(player.maxHp, player.hp + 20); } }
+        ];
+
+        function triggerLevelUp() {
+            game.state = 'PAUSED';
+            upgradeCards.innerHTML = '';
+            
+            // ランダムに3つ抽出
+            let shuffled = [...upgradeOptions].sort(() => 0.5 - Math.random());
+            let choices = shuffled.slice(0, 3);
+            
+            choices.forEach(upg => {
+                let card = document.createElement('div');
+                card.className = 'upgrade-card';
+                card.innerHTML = `<h3>${upg.name}</h3><p>${upg.desc}</p>`;
+                card.onclick = () => {
+                    upg.apply();
+                    updateUI();
+                    game.state = 'PLAYING';
+                    levelUpModal.style.display = 'none';
+                };
+                upgradeCards.appendChild(card);
+            });
+            
+            levelUpModal.style.display = 'flex';
+        }
+
+        function triggerGameOver() {
+            game.state = 'GAMEOVER';
+            updateUI();
+            document.getElementById('final-level').innerText = game.level;
+            document.getElementById('final-kills').innerText = game.kills;
+            gameOverModal.style.display = 'flex';
+        }
+
+        // =========================
+        // 描画処理
+        // =========================
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+
+            // 経験値
+            ctx.fillStyle = '#3498db';
+            for (let o of expOrbs) {
+                ctx.beginPath();
+                ctx.arc(o.x, o.y, o.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 敵
+            ctx.fillStyle = '#e74c3c';
+            for (let e of enemies) {
+                ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+            }
+
+            // プレイヤー座標を基準にする
+            ctx.save();
+            ctx.translate(player.x, player.y);
+
+            // 斬撃エフェクト描画
+            for (let s of slashes) {
+                // 枠線（輝き）
+                ctx.beginPath();
+                ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
+                ctx.lineWidth = Math.max(1, 15 * (s.duration / s.maxDuration)); // 消えるにかけて細くなる
+                ctx.lineCap = "round";
+                ctx.strokeStyle = `rgba(255, 255, 255, ${s.duration / s.maxDuration})`;
+                ctx.stroke();
+
+                // 塗りつぶしの扇形（残像空間）
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
+                ctx.fillStyle = `rgba(200, 255, 255, ${0.4 * (s.duration / s.maxDuration)})`;
+                ctx.fill();
+            }
+
+            // プレイヤー本体の描画
+            if (player.invincibleTimer === 0 || game.frameCount % 10 < 5) {
+                if (player.imageLoaded) {
+                    ctx.drawImage(
+                        playerImage, 
+                        -player.width / 2, 
+                        -player.height / 2, 
+                        player.width, 
+                        player.height
+                    );
+                } else {
+                    ctx.fillStyle = '#2ecc71';
+                    ctx.fillRect(-player.width / 2, -player.height / 2, player.width, player.height);
+                    
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(-player.width / 2, -player.height / 2, player.width, player.height);
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+    </script>
+</body>
+</html>
