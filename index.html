@@ -12,6 +12,8 @@
             color: #fff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             user-select: none;
+            -webkit-user-select: none; /* Safariでのスマホ長押し選択を防止 */
+            touch-action: none; /* 意図しないスクロールやスワイプ戻る操作を防止 */
         }
         canvas {
             display: block;
@@ -60,6 +62,32 @@
             text-shadow: 1px 1px 2px #000;
             margin-top: 10px;
         }
+        /* バーチャルジョイスティックUI */
+        #joystick-zone {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            z-index: 10;
+            touch-action: none; /* 念のためのタッチイベント固定 */
+        }
+        #joystick-stick {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.6);
+            transform: translate(-50%, -50%);
+            pointer-events: none; /* コンテナ側にドラッグイベントを渡す */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+
         #loading-modal, #level-up-modal, #game-over-modal {
             position: absolute;
             top: 0;
@@ -152,6 +180,11 @@
         </div>
     </div>
     
+    <!-- 左下のバーチャルジョイスティック -->
+    <div id="joystick-zone">
+        <div id="joystick-stick"></div>
+    </div>
+
     <div id="loading-modal">
         <h1 style="color: #fff;">Now Loading...</h1>
     </div>
@@ -184,12 +217,76 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // キーボード入力
+        // =========================
+        // 入力管理（キーボード＆ジョイスティック）
+        // =========================
         const keys = {};
         window.addEventListener('keydown', e => keys[e.code] = true);
         window.addEventListener('keyup', e => keys[e.code] = false);
 
-        // ゲームステート
+        // ジョイスティック変数
+        const joystickZone = document.getElementById('joystick-zone');
+        const joystickStick = document.getElementById('joystick-stick');
+        let joystick = {
+            active: false,
+            vector: { x: 0, y: 0 },
+            baseRect: null
+        };
+
+        // スティックの更新処理
+        function updateJoystick(touch) {
+            if (!joystick.baseRect) return;
+            const rect = joystick.baseRect;
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const maxRadius = rect.width / 2; // 操作可能範囲
+
+            let dx = touch.clientX - centerX;
+            let dy = touch.clientY - centerY;
+            let distance = Math.hypot(dx, dy);
+
+            // 操作範囲を飛び出ないように制限
+            if (distance > maxRadius) {
+                dx = (dx / distance) * maxRadius;
+                dy = (dy / distance) * maxRadius;
+            }
+
+            joystickStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+            // -1 〜 1 の正規化されたベクトルとして保存（移動計算用）
+            joystick.vector.x = dx / maxRadius;
+            joystick.vector.y = dy / maxRadius;
+        }
+
+        // タッチイベントの設定
+        joystickZone.addEventListener('touchstart', e => {
+            e.preventDefault(); // スクロール防止
+            joystick.active = true;
+            joystick.baseRect = joystickZone.getBoundingClientRect();
+            updateJoystick(e.changedTouches[0]);
+        }, {passive: false});
+
+        joystickZone.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (joystick.active) {
+                updateJoystick(e.changedTouches[0]);
+            }
+        }, {passive: false});
+
+        const endJoystick = e => {
+            e.preventDefault();
+            joystick.active = false;
+            joystick.vector = { x: 0, y: 0 };
+            joystickStick.style.transform = `translate(-50%, -50%)`; // 中央に戻す
+        };
+
+        joystickZone.addEventListener('touchend', endJoystick);
+        joystickZone.addEventListener('touchcancel', endJoystick);
+
+
+        // =========================
+        // ゲームステートとオブジェクト
+        // =========================
         let game = {
             level: 1,
             exp: 0,
@@ -200,7 +297,6 @@
             baseSpawnRate: 70
         };
 
-        // プレイヤーオブジェクト
         let player = {
             x: width / 2, 
             y: height / 2, 
@@ -222,7 +318,6 @@
         let slashes = []; // 斬撃エフェクトの配列
         let expOrbs = [];
 
-        // UI要素
         const hpBar = document.getElementById('hp-bar');
         const expBar = document.getElementById('exp-bar');
         const levelSpan = document.getElementById('level');
@@ -306,10 +401,8 @@
             }
             
             if (closestEnemy) {
-                // 最も近い敵への角度を計算
                 let targetAngle = Math.atan2(closestEnemy.y - player.y, closestEnemy.x - player.x);
                 
-                // エフェクト生成
                 slashes.push({
                     targetAngle: targetAngle,
                     angle: player.attackAngle,
@@ -318,27 +411,19 @@
                     maxDuration: 12
                 });
 
-                // 発生した瞬間に当たり判定を1度だけ一括処理する
                 for (let i = enemies.length - 1; i >= 0; i--) {
                     let e = enemies[i];
                     let distToEnemy = getDistance(player.x, player.y, e.x, e.y);
                     
-                    // 距離が攻撃範囲内か？（敵の半径分も少し加味）
                     if (distToEnemy <= player.attackRange + e.size / 2) {
-                        
-                        // プレイヤーから敵への角度
                         let angleToEnemy = Math.atan2(e.y - player.y, e.x - player.x);
-                        
-                        // 目標角度との差を計算して 0〜π の範囲に正規化
                         let angleDiff = Math.abs(angleToEnemy - targetAngle);
                         while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
                         angleDiff = Math.abs(angleDiff);
 
-                        // 敵が斬撃の扇形の中に入っている、またはプレイヤーに極めて近い場合はヒット
                         if (angleDiff <= player.attackAngle / 2 || distToEnemy < player.width) {
                             e.hp -= player.damage;
                             
-                            // 倒した処理
                             if (e.hp <= 0) {
                                 expOrbs.push({ x: e.x, y: e.y, radius: 4, value: 1 });
                                 enemies.splice(i, 1);
@@ -354,8 +439,10 @@
             if (game.state !== 'PLAYING') return;
             game.frameCount++;
 
-            // プレイヤーの移動
+            // プレイヤーの移動処理
             let dx = 0, dy = 0;
+            
+            // 1. キーボードの入力を判定
             if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
             if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
             if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
@@ -366,22 +453,29 @@
                 dx /= len; dy /= len;
             }
 
+            // 2. ジョイスティックの入力があれば上書きする
+            if (joystick.active) {
+                dx = joystick.vector.x;
+                dy = joystick.vector.y;
+            }
+
             player.x += dx * player.speed;
             player.y += dy * player.speed;
             
+            // 画面外への飛び出し防止
             player.x = Math.max(player.width / 2, Math.min(width - player.width / 2, player.x));
             player.y = Math.max(player.height / 2, Math.min(height - player.height / 2, player.y));
 
             if (player.invincibleTimer > 0) player.invincibleTimer--;
 
-            // 自動斬撃の発動
+            // 自動斬撃のタイマー
             player.attackTimer++;
             if (player.attackTimer >= player.attackCooldown) {
                 fireSlash();
                 player.attackTimer = 0;
             }
 
-            // 斬撃エフェクトの更新（時間経過で消える）
+            // 斬撃エフェクトの更新
             for (let i = slashes.length - 1; i >= 0; i--) {
                 slashes[i].duration--;
                 if (slashes[i].duration <= 0) {
@@ -396,14 +490,13 @@
                 if (game.level >= 5) spawnEnemy();
             }
 
-            // 敵の追従移動・被弾判定
+            // 敵の移動・被弾計算
             for (let i = enemies.length - 1; i >= 0; i--) {
                 let e = enemies[i];
                 let angle = Math.atan2(player.y - e.y, player.x - e.x);
                 e.x += Math.cos(angle) * e.speed;
                 e.y += Math.sin(angle) * e.speed;
 
-                // Rectangle当たり判定
                 if (player.invincibleTimer === 0 && checkCollisionRect(player.x, player.y, player.width, player.height, e.x, e.y, e.size, e.size)) {
                     player.hp -= e.damage;
                     player.invincibleTimer = 30; // 被弾後の無敵時間
@@ -416,14 +509,13 @@
                 }
             }
 
-            // 経験値オーブの回収判定
+            // 経験値オーブ引き寄せ＆取得
             let pickupRadius = Math.max(player.width, player.height) + 30; 
             for (let i = expOrbs.length - 1; i >= 0; i--) {
                 let o = expOrbs[i];
                 let dist = getDistance(player.x, player.y, o.x, o.y);
                 
                 if (dist < pickupRadius) {
-                    // 近づいたら吸い込まれる処理
                     if (dist > Math.max(player.width, player.height) / 2) {
                         let angle = Math.atan2(player.y - o.y, player.x - o.x);
                         o.x += Math.cos(angle) * 8;
@@ -455,9 +547,6 @@
             }
         }
 
-        // =========================
-        // 強化ステータス一覧
-        // =========================
         const upgradeOptions = [
             { name: "攻撃速度アップ", desc: "斬撃の間隔が短縮されます", apply: () => player.attackCooldown = Math.max(10, player.attackCooldown * 0.85) },
             { name: "斬撃距離アップ", desc: "攻撃の届く範囲（半径）が長くなります", apply: () => player.attackRange += 20 },
@@ -471,7 +560,6 @@
             game.state = 'PAUSED';
             upgradeCards.innerHTML = '';
             
-            // ランダムに3つ抽出
             let shuffled = [...upgradeOptions].sort(() => 0.5 - Math.random());
             let choices = shuffled.slice(0, 3);
             
@@ -499,13 +587,9 @@
             gameOverModal.style.display = 'flex';
         }
 
-        // =========================
-        // 描画処理
-        // =========================
         function draw() {
             ctx.clearRect(0, 0, width, height);
 
-            // 経験値
             ctx.fillStyle = '#3498db';
             for (let o of expOrbs) {
                 ctx.beginPath();
@@ -513,27 +597,22 @@
                 ctx.fill();
             }
 
-            // 敵
             ctx.fillStyle = '#e74c3c';
             for (let e of enemies) {
                 ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
             }
 
-            // プレイヤー座標を基準にする
             ctx.save();
             ctx.translate(player.x, player.y);
 
-            // 斬撃エフェクト描画
             for (let s of slashes) {
-                // 枠線（輝き）
                 ctx.beginPath();
                 ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
-                ctx.lineWidth = Math.max(1, 15 * (s.duration / s.maxDuration)); // 消えるにかけて細くなる
+                ctx.lineWidth = Math.max(1, 15 * (s.duration / s.maxDuration));
                 ctx.lineCap = "round";
                 ctx.strokeStyle = `rgba(255, 255, 255, ${s.duration / s.maxDuration})`;
                 ctx.stroke();
 
-                // 塗りつぶしの扇形（残像空間）
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
                 ctx.arc(0, 0, s.radius, s.targetAngle - s.angle / 2, s.targetAngle + s.angle / 2);
@@ -541,7 +620,6 @@
                 ctx.fill();
             }
 
-            // プレイヤー本体の描画
             if (player.invincibleTimer === 0 || game.frameCount % 10 < 5) {
                 if (player.imageLoaded) {
                     ctx.drawImage(
