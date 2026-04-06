@@ -25,9 +25,9 @@
 
         #ui-container {
             position: absolute;
-            top: 10px;
-            left: 10px;
-            right: 10px;
+            top: max(10px, env(safe-area-inset-top));
+            left: max(10px, env(safe-area-inset-left));
+            right: max(10px, env(safe-area-inset-right));
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -87,8 +87,8 @@
 
         #trigger-slots {
             position: absolute;
-            bottom: 10px;
-            right: 10px;
+            bottom: max(10px, env(safe-area-inset-bottom));
+            right: max(10px, env(safe-area-inset-right));
             text-align: right;
             pointer-events: none;
             z-index: 10;
@@ -334,6 +334,16 @@
             font-weight: bold;
             color: #f1c40f;
         }
+        @media (max-width: 768px) {
+            #prep-modal { flex-direction: column; overflow-y: auto; align-items: center; justify-content: flex-start; }
+            .prep-left { width: 100%; border-right: none; border-bottom: 2px solid #00ffff; padding: 10px; }
+            .prep-right { width: 100%; padding: 10px; }
+            #char-preview { width: 150px; height: 150px; }
+            .char-info { width: 100%; font-size: 14px; padding: 10px; }
+            .prep-slot { width: 100%; max-width: 350px; font-size: 14px; padding: 5px 10px; }
+            .prep-slot select { width: 120px; font-size: 14px; }
+            .prep-title { font-size: 24px; margin-bottom: 15px; }
+        }
     </style>
 </head>
 
@@ -505,14 +515,15 @@
             baseSpawnRate: 70,
             nextMidBossKill: 30,
             finalBossKills: 0,
-            nextFinalBossKill: 100,
+            nextFinalBossKill: 300,
             bailoutVelocity: 0
         };
 
         let player = {
             x: width / 2, y: height / 2, width: 48, height: 48, speed: 3.5,
             hp: 100, maxHp: 100, invincibleTimer: 0, imageLoaded: false,
-            triggers: { mr: null, sr: null, ml: null, sl: null }
+            triggers: { mr: null, sr: null, ml: null, sl: null },
+            dashTimer: 0, dashVx: 0, dashVy: 0
         };
 
         const T_INFO = {
@@ -744,7 +755,8 @@
                 hp: 2 * hpMultiplier,
                 damage: 10,
                 isMidBoss: false,
-                isFinalBoss: false
+                isFinalBoss: false,
+                hitTimer: 0
             });
         }
 
@@ -754,19 +766,23 @@
                 x: width / 2, y: -100,
                 size: 80, speed: 1.0,
                 hp: hpMultiplier * 9,
-                damage: 20, isMidBoss: true, isFinalBoss: false
+                damage: 20, isMidBoss: true, isFinalBoss: false,
+                hitTimer: 0
             });
             showAlert('門（ゲート）開口！付近に中型トリオン兵を検知！');
         }
 
         function spawnFinalBoss() {
             let hpMultiplier = 1 + Math.floor(game.level / 3);
-            let finalBossHp = (hpMultiplier * 3 * 5) * 20;
+            let finalBossHp = (2 * hpMultiplier) * 50; // 通常敵(2)の50倍に倍率考慮
             enemies.push({
                 x: width / 2, y: -100,
-                size: 120, speed: 0.8,
+                size: 120, speed: 1.2,
                 hp: finalBossHp,
-                damage: 40, isMidBoss: false, isFinalBoss: true
+                damage: 40, isMidBoss: false, isFinalBoss: true,
+                hitTimer: 0,
+                dashCooldown: 180 + Math.random() * 120,
+                dashPhase: 'none'
             });
             showAlert('緊急事態！付近に特級、または新型近界民（ネイバー）の反応！');
         }
@@ -799,17 +815,20 @@
         // =========================
         function dealDamage(e, dmg) {
             e.hp -= dmg;
+            e.hitTimer = 5;
             if (e.hp <= 0) {
                 if (e.isFinalBoss) {
                     game.finalBossKills++;
-                    if (game.finalBossKills >= 2) triggerGameClear();
+                    if (game.finalBossKills >= 1) triggerGameClear();
                 }
-                let xp = 1; let r = 4;
-                if (e.isMidBoss) { xp = 3; r = 6; }
-                else if (e.isFinalBoss) { xp = 8; r = 10; }
+                // オーブ
+                let xp = 1; let r = 4; let type = 'normal';
+                if (e.isMidBoss) { xp = 5; r = 8; type = 'midboss'; }
+                else if (e.isFinalBoss) { xp = 10; r = 12; type = 'boss'; }
+                else if (Math.random() < 0.25) { xp = 2; r = 5; type = 'rare'; }
 
-                expOrbs.push({ x: e.x, y: e.y, radius: r, value: xp });
-                if (Math.random() < 0.10) healthPotions.push({ x: e.x, y: e.y, radius: 10 });
+                expOrbs.push({ x: e.x, y: e.y, radius: r, value: xp, type: type });
+                if (Math.random() < 0.05) healthPotions.push({ x: e.x, y: e.y, radius: 10 });
 
                 let idx = enemies.indexOf(e);
                 if (idx !== -1) enemies.splice(idx, 1);
@@ -829,14 +848,17 @@
             if (!closest) return;
 
             if (t.type === 'grasshopper') {
-                let jumpDist = 180;
-                if (t.options.includes('gh_dist')) jumpDist += 120;
-                player.x += (player.lastDx || 1) * jumpDist;
-                player.y += (player.lastDy || 0) * jumpDist;
+                let jumpSpeed = 16;
+                if (t.options.includes('gh_dist')) jumpSpeed += 8;
+                player.dashTimer = 10; // 数フレーム持続
+                player.dashVx = (player.lastDx || 1) * jumpSpeed;
+                player.dashVy = (player.lastDy || 0) * jumpSpeed;
+                player.invincibleTimer = 20; // 0.3秒無敵
+                // パネルエフェクト（起点）
                 wtSlashes.push({
-                    type: 'grasshopper', color: '#2ecc71',
+                    type: 'grasshopper', color: '#2ecc71', x: player.x, y: player.y,
                     targetAngle: 0, angle: Math.PI * 2,
-                    radius: player.width, duration: 15, maxDuration: 15
+                    radius: player.width, duration: 20, maxDuration: 20
                 });
                 return;
             }
@@ -925,8 +947,15 @@
                 dy = joystick.vector.y;
             }
 
-            player.x += dx * player.speed;
-            player.y += dy * player.speed;
+            if (player.dashTimer > 0) {
+                player.x += player.dashVx;
+                player.y += player.dashVy;
+                player.dashTimer--;
+            } else {
+                player.x += dx * player.speed;
+                player.y += dy * player.speed;
+            }
+            // 固定画面マップへの回帰
             player.x = Math.max(player.width / 2, Math.min(width - player.width / 2, player.x));
             player.y = Math.max(player.height / 2, Math.min(height - player.height / 2, player.y));
 
@@ -953,10 +982,21 @@
                     return;
                 }
 
-                triggerState[slot].timer++;
+                if (triggerState[slot].timer < cd) {
+                    triggerState[slot].timer++;
+                }
                 if (triggerState[slot].timer >= cd) {
-                    triggerState[slot].timer = 0;
-                    fireTrigger(slot, t);
+                    if (t.type === 'grasshopper') {
+                        // 移動中かつShiftキー押下で能動発動
+                        if ((dx !== 0 || dy !== 0) && (keys['ShiftLeft'] || keys['ShiftRight'] || joystick.magnitude > 0.8)) {
+                            triggerState[slot].timer = 0;
+                            fireTrigger(slot, t);
+                        }
+                    } else {
+                        // その他は自動発動
+                        triggerState[slot].timer = 0;
+                        fireTrigger(slot, t);
+                    }
                 }
             });
 
@@ -983,9 +1023,8 @@
                     if (game.level >= 5) spawnEnemy();
                 }
             }
-            if (game.kills >= game.nextFinalBossKill && !hasFinalBoss) {
+            if (game.kills >= game.nextFinalBossKill && !hasFinalBoss && game.finalBossKills === 0) {
                 spawnFinalBoss();
-                game.nextFinalBossKill += 100;
             }
 
             // プロジェクタイル更新
@@ -1020,9 +1059,48 @@
             // 敵の移動と当たり判定
             for (let i = enemies.length - 1; i >= 0; i--) {
                 let e = enemies[i];
-                let angle = Math.atan2(player.y - e.y, player.x - e.x);
-                e.x += Math.cos(angle) * e.speed;
-                e.y += Math.sin(angle) * e.speed;
+                if (e.hitTimer > 0) e.hitTimer--;
+                
+                if (e.isFinalBoss) {
+                    if (e.dashPhase === 'none') {
+                        e.dashCooldown--;
+                        if (e.dashCooldown <= 0) {
+                            e.dashPhase = 'pre';
+                            e.dashPhaseTimer = 45; // 0.75s 予備動作
+                            e.dashTargetAngle = Math.atan2(player.y - e.y, player.x - e.x);
+                        }
+                        // 通常移動
+                        let angle = Math.atan2(player.y - e.y, player.x - e.x);
+                        e.x += Math.cos(angle) * e.speed;
+                        e.y += Math.sin(angle) * e.speed;
+                    } else if (e.dashPhase === 'pre') {
+                        e.dashPhaseTimer--;
+                        if (e.dashPhaseTimer <= 0) {
+                            e.dashPhase = 'dash';
+                            e.dashPhaseTimer = 20; // 0.3s ダッシュ
+                        }
+                        // 予備動作中は静止
+                    } else if (e.dashPhase === 'dash') {
+                        e.x += Math.cos(e.dashTargetAngle) * (e.speed * 3);
+                        e.y += Math.sin(e.dashTargetAngle) * (e.speed * 3);
+                        e.dashPhaseTimer--;
+                        if (e.dashPhaseTimer <= 0) {
+                            e.dashPhase = 'post';
+                            e.dashPhaseTimer = 60; // 1s 隙
+                        }
+                    } else if (e.dashPhase === 'post') {
+                        e.dashPhaseTimer--;
+                        if (e.dashPhaseTimer <= 0) {
+                            e.dashPhase = 'none';
+                            e.dashCooldown = 180 + Math.random() * 120;
+                        }
+                        // 隙の間は静止
+                    }
+                } else {
+                    let angle = Math.atan2(player.y - e.y, player.x - e.x);
+                    e.x += Math.cos(angle) * e.speed;
+                    e.y += Math.sin(angle) * e.speed;
+                }
 
                 if (player.invincibleTimer === 0 && checkCollisionRect(player.x, player.y, player.width, player.height, e.x, e.y, e.size, e.size)) {
 
@@ -1065,15 +1143,15 @@
             }
 
             // アイテム回収
-            let pickupRadius = Math.max(player.width, player.height) + 30;
+            let pickupRadius = 80;
             for (let i = expOrbs.length - 1; i >= 0; i--) {
                 let o = expOrbs[i];
                 let dist = getDistance(player.x, player.y, o.x, o.y);
                 if (dist < pickupRadius) {
-                    if (dist > player.width / 2) {
+                    if (dist > 15) {
                         let angle = Math.atan2(player.y - o.y, player.x - o.x);
-                        o.x += Math.cos(angle) * 8;
-                        o.y += Math.sin(angle) * 8;
+                        o.x += Math.cos(angle) * 10;
+                        o.y += Math.sin(angle) * 10;
                     } else {
                         game.exp += o.value * (player.expMultiplier || 1.0);
                         expOrbs.splice(i, 1);
@@ -1196,8 +1274,12 @@
             }
 
             // exp
-            ctx.fillStyle = '#f1c40f';
             for (let o of expOrbs) {
+                if (o.type === 'boss') ctx.fillStyle = '#9b59b6';
+                else if (o.type === 'midboss') ctx.fillStyle = '#e74c3c';
+                else if (o.type === 'rare') ctx.fillStyle = '#3498db';
+                else ctx.fillStyle = '#e67e22';
+
                 ctx.beginPath();
                 ctx.arc(o.x, o.y, o.radius, 0, Math.PI * 2);
                 ctx.fill();
@@ -1228,93 +1310,101 @@
 
             // Enemies
             for (let e of enemies) {
-                if (e.isFinalBoss) {
-                    if (rabitoImageLoaded) ctx.drawImage(rabitoImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
-                    else { ctx.fillStyle = '#9b59b6'; ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size); }
-                } else {
-                    if (enemyImageLoaded) ctx.drawImage(enemyImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
-                    else { ctx.fillStyle = '#e74c3c'; ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size); }
-                }
-            }
-
-            // プレイヤー
-            if (player.invincibleTimer > 0 && Math.floor(Date.now() / 100) % 2 === 0) {
-            } else {
                 ctx.save();
-                ctx.translate(player.x, player.y);
-                if (player.imageLoaded) {
-                    ctx.drawImage(playerImage, -player.width / 2, -player.height / 2, player.width, player.height);
+                if (e.hitTimer > 0) {
+                    ctx.globalCompositeOperation = 'lighter';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.globalAlpha = 1.0;
+                    ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
                 } else {
-                    ctx.fillStyle = '#3498db';
-                    ctx.beginPath();
-                    ctx.arc(0, 0, player.width / 2, 0, Math.PI * 2);
-                    ctx.fill();
+                    if (e.isFinalBoss) {
+                        if (e.dashPhase === 'dash') {
+                            for (let j = 1; j <= 3; j++) {
+                                ctx.save();
+                                ctx.globalAlpha = 0.4 / j;
+                                let ox = Math.cos(e.dashTargetAngle) * (e.speed * 3) * -j * 2;
+                                let oy = Math.sin(e.dashTargetAngle) * (e.speed * 3) * -j * 2;
+                                if (rabitoImageLoaded) ctx.drawImage(rabitoImage, e.x - e.size / 2 + ox, e.y - e.size / 2 + oy, e.size, e.size);
+                                else { ctx.fillStyle = '#9b59b6'; ctx.fillRect(e.x - e.size / 2 + ox, e.y - e.size / 2 + oy, e.size, e.size); }
+                                ctx.restore();
+                            }
+                        }
+                        if (rabitoImageLoaded) ctx.drawImage(rabitoImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                        else { ctx.fillStyle = '#9b59b6'; ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size); }
+                    } else {
+                        if (enemyImageLoaded) ctx.drawImage(enemyImage, e.x - e.size / 2, e.y - e.size / 2, e.size, e.size);
+                        else { ctx.fillStyle = '#e74c3c'; ctx.fillRect(e.x - e.size / 2, e.y - e.size / 2, e.size, e.size); }
+                    }
                 }
                 ctx.restore();
             }
 
-            ctx.save();
-            ctx.translate(player.x, player.y);
+            // プレイヤー
+            if (!(player.invincibleTimer > 0 && Math.floor(Date.now() / 100) % 2 === 0)) {
+                if (player.imageLoaded) {
+                    ctx.drawImage(playerImage, player.x - player.width / 2, player.y - player.height / 2, player.width, player.height);
+                } else {
+                    ctx.fillStyle = '#3498db';
+                    ctx.beginPath();
+                    ctx.arc(player.x, player.y, player.width / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
 
-            // Slashes
+            // Slashes & Shields
             for (let s of wtSlashes) {
                 let progress = 1.0 - (s.duration / s.maxDuration);
                 let startAngle = s.targetAngle - s.angle / 2;
                 let currentAngle = startAngle + (s.angle * Math.pow(progress, 0.5));
+                
+                let sx = s.x !== undefined ? s.x : player.x;
+                let sy = s.y !== undefined ? s.y : player.y;
 
                 ctx.save();
                 ctx.globalCompositeOperation = "lighter";
                 ctx.lineCap = "round";
-
                 let baseWidth = (s.type === 'scorpion' ? 15 : 40) * Math.sin(progress * Math.PI);
 
                 // Layer 1: Glow
                 ctx.beginPath();
-                ctx.arc(0, 0, s.radius, startAngle, currentAngle);
+                ctx.arc(sx, sy, s.radius, startAngle, currentAngle);
                 ctx.shadowBlur = s.type === 'scorpion' ? 15 : 40;
                 ctx.shadowColor = s.color;
                 ctx.lineWidth = baseWidth * 1.5;
                 ctx.strokeStyle = s.color;
                 ctx.stroke();
 
-                // Layer 2: Core Color
+                // Layer 2 & 3
                 ctx.beginPath();
-                ctx.arc(0, 0, s.radius, startAngle, currentAngle);
+                ctx.arc(sx, sy, s.radius, startAngle, currentAngle);
                 ctx.shadowBlur = 0;
                 ctx.lineWidth = baseWidth * 0.8;
                 let rgb = s.color === '#f1c40f' ? '241,196,15' : '52,152,219';
                 ctx.strokeStyle = `rgba(${rgb}, 0.8)`;
                 ctx.stroke();
 
-                // Layer 3: White Center
                 ctx.beginPath();
-                ctx.arc(0, 0, s.radius, startAngle, currentAngle);
+                ctx.arc(sx, sy, s.radius, startAngle, currentAngle);
                 ctx.lineWidth = baseWidth * 0.3;
                 ctx.strokeStyle = '#ffffff';
                 ctx.stroke();
-
                 ctx.restore();
             }
 
-            // Shield Effects
             for (let s of shieldEffects) {
                 let progress = s.duration / 20;
                 ctx.save();
                 ctx.globalCompositeOperation = "lighter";
                 ctx.beginPath();
-                ctx.arc(0, 0, T_INFO.shield.range, s.angle - Math.PI / 4, s.angle + Math.PI / 4);
-                ctx.lineWidth = 8;
+                ctx.arc(player.x, player.y, T_INFO.shield.range, s.angle - Math.PI / 4, s.angle + Math.PI / 4);
+                ctx.lineWidth = 10;
                 ctx.lineCap = "round";
-                ctx.strokeStyle = `rgba(46, 204, 113, ${progress * 0.8})`; // green shield
+                ctx.strokeStyle = `rgba(46, 204, 113, ${progress})`;
                 ctx.stroke();
-
-                ctx.fillStyle = `rgba(46, 204, 113, ${progress * 0.2})`;
-                ctx.fill();
                 ctx.restore();
             }
 
-            ctx.restore();
-
+            // Alertはカメラに影響されず画面中央に固定
             for (let i = customAlerts.length - 1; i >= 0; i--) {
                 let a = customAlerts[i];
                 ctx.fillStyle = `rgba(231, 76, 60, ${Math.min(1, a.timer / 30)})`;
